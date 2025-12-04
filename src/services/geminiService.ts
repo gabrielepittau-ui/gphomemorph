@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { GenerationConfig, DetectedItem, AppMode, DetailShotAngle } from "../types";
 import { STYLES, MASTER_SHOOTING_STYLES, PRICING_CONFIG } from "../constants";
@@ -125,14 +124,6 @@ const tileBase64Image = async (base64: string, tileCount: number): Promise<strin
     });
 };
 
-const safeStringify = (obj: any) => {
-  try {
-    return JSON.stringify(obj);
-  } catch {
-    return String(obj);
-  }
-};
-
 async function retryOperation<T>(operation: () => Promise<T>, maxRetries: number = 3): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
@@ -219,16 +210,24 @@ export const generateInteriorDesign = async (
 
   // 1. EDIT MODE PROMPT
   if (config.mode === AppMode.EDITING) {
-     let prompt = `You are an expert interior design editor. TASK: Modify ONLY specific elements based on request: "${config.customPrompt}". PRESERVE everything else pixel-perfect.${materialPrompts}`;
+     let prompt = `
+     You are an expert interior design editor. 
+     TASK: Modify ONLY specific elements based on request: "${config.customPrompt}". 
+     PRESERVE everything else pixel-perfect.
+     ${materialPrompts}
+     `;
+     
      const parts: any[] = [
          { text: prompt },
          { inlineData: { data: imageBase64, mimeType: mimeType } }
      ];
+     
      if (config.maskBase64) {
-         prompt += " \n A reference MASK is provided (Image 2). WHITE areas = EDIT. BLACK areas = PRESERVE.";
+         prompt += " \n\nIMPORTANT: A binary MASK image is provided. \n- WHITE pixels represent the area you MUST EDIT.\n- BLACK pixels represent the area you MUST PRESERVE EXACTLY.\n- Do NOT modify the black area under any circumstances.";
          parts[0] = { text: prompt };
          parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } });
      }
+     
      return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
   }
 
@@ -243,8 +242,7 @@ export const generateInteriorDesign = async (
       return executeGenerationMultiModalWithFallback(ai, parts, config);
   }
 
-  // 3. RESTYLING PROMPT
-  // Logic updated to handle string IDs from JSON
+  // 3. RESTYLING PROMPT (STRENGTHENED AGAINST HALLUCINATION)
   const styleObj = STYLES.find(s => s.id === config.style);
   const styleDescription = styleObj ? styleObj.description : config.style;
   const styleName = styleObj ? styleObj.label : config.style;
@@ -253,18 +251,27 @@ export const generateInteriorDesign = async (
   const shootingDescription = shootingObj ? shootingObj.description : config.shootingStyle;
 
   const prompt = `
-    RESTYLE INTERIOR.
-    Style: ${styleName}. Description: ${styleDescription}.
-    Shooting: ${shootingDescription}.
+    ROLE: High-End Interior Architect.
+    TASK: Restyle this room while preserving its structural integrity.
+    
+    TARGET STYLE: ${styleName}.
+    DESCRIPTION: ${styleDescription}.
+    PHOTOGRAPHY: ${shootingDescription}.
     
     ${materialPrompts}
 
-    PRESERVE: [${config.itemsToLock.filter(i=>i.selected && !i.notes).map(i=>i.label).join(", ")}].
-    MODIFY: ${config.itemsToLock.filter(i=>i.selected && i.notes).map(i=>`${i.label} -> ${i.notes}`).join("; ")}.
-    ADD: ${config.addedItems.map(i=>i.label + " " + i.detail).join(", ")}.
+    === GEOMETRY LOCK (ANTI-HALLUCINATION) ===
+    - CRITICAL: You MUST PRESERVE the exact perspective, room layout, and structural elements (walls, windows, doors, ceiling height).
+    - DO NOT move windows. DO NOT change the room shape.
+    - DO NOT hallucinate new architectural features not present in the original image unless explicitly asked.
+    
+    === EXECUTION PLAN ===
+    PRESERVE OBJECTS: [${config.itemsToLock.filter(i=>i.selected && !i.notes).map(i=>i.label).join(", ")}].
+    RESTYLE OBJECTS: ${config.itemsToLock.filter(i=>i.selected && i.notes).map(i=>`${i.label} -> ${i.notes}`).join("; ")}.
+    ADD NEW ELEMENTS: ${config.addedItems.map(i=>i.label + " " + i.detail).join(", ")}.
     
     Output: Photorealistic 4K render.
-    ${config.customPrompt ? `EXTRA: ${config.customPrompt}` : ''}
+    ${config.customPrompt ? `EXTRA INSTRUCTIONS: ${config.customPrompt}` : ''}
   `;
 
   return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, []);

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { ConfigManager, AppConfig } from './config/configManager';
-import { Save, RotateCcw, Download, Upload, Plus, Trash2, Edit2, Check } from 'lucide-react';
+import { X, Save, RotateCcw, Download, Upload, Plus, Trash2, Edit2, Check } from 'lucide-react';
 
 interface AdminPanelProps {
   onClose: () => void;

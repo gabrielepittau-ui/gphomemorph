@@ -249,11 +249,19 @@ const App: React.FC = () => {
       const ctx = tempCanvas.getContext('2d');
       
       if (ctx) {
-          ctx.fillStyle = 'black';
-          ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+          // 1. Draw the user's strokes (Transparent background, Colored strokes)
           ctx.drawImage(maskCanvasRef.current, 0, 0);
+          
+          // 2. Change Source (strokes) to White
+          // 'source-in' keeps the new fill only where the existing content (strokes) matches
           ctx.globalCompositeOperation = 'source-in';
-          ctx.fillStyle = 'white';
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+          
+          // 3. Fill Background (Transparent areas) to Black
+          // 'destination-over' draws behind the existing content
+          ctx.globalCompositeOperation = 'destination-over';
+          ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
       }
       
