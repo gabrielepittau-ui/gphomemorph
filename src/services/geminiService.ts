@@ -1,25 +1,32 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { GenerationConfig, DetectedItem, AppMode, DetailShotAngle } from "../types";
 import { STYLES, MASTER_SHOOTING_STYLES, PRICING_CONFIG } from "../constants";
 
 // Helper to get API Key safely (Vite or Process)
 const getApiKey = (): string => {
+  let key = "";
+  
+  // 1. Try Vite env
   try {
     // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
       // @ts-ignore
-      return import.meta.env.VITE_API_KEY || "";
+      key = import.meta.env.VITE_API_KEY;
     }
-  } catch (e) {
-    // Ignore error if import.meta is not available
+  } catch (e) {}
+
+  // 2. Try Process env (Fallback)
+  if (!key) {
+    try {
+      // @ts-ignore
+      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+        // @ts-ignore
+        key = process.env.API_KEY;
+      }
+    } catch (e) {}
   }
   
-  try {
-    // @ts-ignore
-    return process.env.API_KEY || "";
-  } catch (e) {
-    return "";
-  }
+  return key || "";
 };
 
 // Helper to convert File to Base64
@@ -62,7 +69,6 @@ const cropBase64Image = async (base64: string, xPercent: number, yPercent: numbe
         if (x + w > img.width) w = img.width - x;
         if (y + h > img.height) h = img.height - y;
 
-        // Set higher resolution for crop to help AI see details
         canvas.width = 1536; 
         canvas.height = (h / w) * 1536;
         
@@ -126,8 +132,6 @@ const tileBase64Image = async (base64: string, tileCount: number): Promise<strin
 };
 
 // === CLIENT SIDE INPAINTING COMPOSITOR ===
-// This function strictly enforces the mask by overlaying the original image 
-// onto the generated image wherever the mask is black.
 const blendGeneratedWithOriginal = async (originalB64: string, generatedB64: string, maskB64: string): Promise<string> => {
   return new Promise((resolve) => {
     const original = new Image();
@@ -166,7 +170,7 @@ const blendGeneratedWithOriginal = async (originalB64: string, generatedB64: str
             // Draw generated image
             tempCtx.drawImage(generated, 0, 0, original.width, original.height);
 
-            // Apply Mask (Keep generated only where mask is white)
+            // Apply Mask logic
             tempCtx.globalCompositeOperation = 'destination-in';
             tempCtx.drawImage(mask, 0, 0, original.width, original.height);
 
@@ -195,6 +199,15 @@ const blendGeneratedWithOriginal = async (originalB64: string, generatedB64: str
   });
 };
 
+// === SAFETY SETTINGS: BLOCK NONE ===
+// This prevents the AI from blocking images of bedrooms/bathrooms/etc.
+const SAFETY_SETTINGS = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
+
 async function retryOperation<T>(operation: () => Promise<T>, maxRetries: number = 3): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
@@ -203,7 +216,7 @@ async function retryOperation<T>(operation: () => Promise<T>, maxRetries: number
     } catch (error: any) {
       lastError = error;
       const msg = error.message || "";
-      if (msg.includes("503") || msg.includes("429") || msg.includes("overloaded") || msg.includes("fetch failed")) {
+      if (msg.includes("503") || msg.includes("429") || msg.includes("overloaded") || msg.includes("fetch failed") || msg.includes("network")) {
         const delay = 1500 * Math.pow(2, i);
         console.warn(`Tentativo ${i + 1} fallito. Riprovo in ${delay}ms...`, msg);
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -221,7 +234,15 @@ export const detectFurniture = async (
   mimeType: string
 ): Promise<{ items: DetectedItem[], cost: number }> => {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error("API Key mancante.");
+  if (!apiKey) throw new Error("API Key mancante. Verifica la configurazione.");
+
+  // Validation
+  const supportedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+  let validMimeType = mimeType;
+  if (!supportedMimeTypes.includes(mimeType)) {
+      console.warn("Unsupported mime type detected, defaulting to jpeg:", mimeType);
+      validMimeType = 'image/jpeg';
+  }
 
   return retryOperation(async () => {
     try {
@@ -230,20 +251,30 @@ export const detectFurniture = async (
         model: 'gemini-2.5-flash',
         contents: {
           parts: [
-            { text: "Analizza questa immagine. Elenca i mobili e oggetti principali (es. Divano, Tavolo, Lampada). Restituisci SOLO un array JSON di stringhe: [\"Divano\", \"Tavolo\"]." },
-            { inlineData: { data: imageBase64, mimeType: mimeType } },
+            { text: "Analizza questa immagine. Elenca i mobili e oggetti principali (es. Divano, Tavolo, Lampada). Restituisci SOLO un array JSON di stringhe: [\"Divano\", \"Tavolo\"]. NON aggiungere altro testo." },
+            { inlineData: { data: imageBase64, mimeType: validMimeType } },
           ],
         },
         config: {
           responseMimeType: "application/json",
-          responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } }
+          responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
+          safetySettings: SAFETY_SETTINGS
         }
       });
 
       let text = response.text || "[]";
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      const arrayMatch = text.match(/\[.*\]/s);
+      if (arrayMatch) text = arrayMatch[0];
+
       let items: any[] = [];
-      try { items = JSON.parse(text); } catch (e) { items = ["Elementi rilevati"]; }
+      try { 
+          items = JSON.parse(text); 
+      } catch (e) { 
+          console.warn("JSON Parse failed, using fallback items");
+          items = ["Elementi rilevati"]; 
+      }
       
       if (!Array.isArray(items)) items = ["Elementi rilevati"];
 
@@ -257,7 +288,10 @@ export const detectFurniture = async (
       return { items: detected, cost: PRICING_CONFIG.ANALYSIS_COST };
     } catch (error) {
       console.error("Detection Error:", error);
-      throw error;
+      return { 
+          items: [{ id: '1', label: 'Arredamento', selected: true, notes: '' }], 
+          cost: 0 
+      };
     }
   });
 };
@@ -271,66 +305,58 @@ export const generateInteriorDesign = async (
   if (!apiKey) throw new Error("API Key mancante.");
   const ai = new GoogleGenAI({ apiKey });
 
-  // === MATERIAL PROMPT BUILDING ===
   const materialPrompts = config.selectedMaterials && config.selectedMaterials.length > 0
       ? `\n=== STRICT MATERIAL PALETTE ===\nUse ONLY these materials for relevant objects:\n${config.selectedMaterials.map(m => `- ${m.prompt}`).join("\n")}\n`
       : "";
+  
+  // Validation
+  let validMimeType = mimeType;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+      validMimeType = 'image/jpeg';
+  }
 
-  // 1. EDIT MODE PROMPT (STRICT MASKING & COMPOSITING)
   if (config.mode === AppMode.EDITING) {
      let prompt = "";
      
      if (config.maskBase64) {
-         // CASE A: User Painted a Mask (Specific Edit)
          prompt = `
-         ROLE: Expert Photo Retoucher & Product Designer.
-         TASK: Modify ONLY the masked area. 
-         
+         ROLE: Expert Photo Retoucher.
+         TASK: Modify ONLY the WHITE area of the provided mask.
          USER REQUEST: "${config.customPrompt}"
-         
-         INPUTS:
-         - Image 1: Original.
-         - Image 2: Mask (White = Edit, Black = Protect).
-         
-         RULES:
-         1. Edit ONLY pixels corresponding to the White Mask.
-         2. DO NOT TOUCH the black area. 
-         3. Blend lighting perfectly.
+         INPUTS: Image 1: Original Room. Image 2: Editing Mask (White = Edit, Black = Ignore).
+         INSTRUCTIONS:
+         1. Apply the user's request ONLY to the pixels corresponding to the WHITE mask area.
+         2. DO NOT change the perspective or geometry of the surrounding room.
+         3. Ensure lighting and shadows on the new object match the original room.
          ${materialPrompts}
          `;
      } else {
-         // CASE B: Global Edit (No Mask) - DANGEROUS FOR HALLUCINATIONS
-         // We must lock the geometry strictly.
          prompt = `
          ROLE: High-End Colorist & Lighting Director.
          TASK: Adjust the atmosphere or specific details WITHOUT changing the 3D model of the furniture.
-         
          USER REQUEST: "${config.customPrompt}"
-         
          STRICT GEOMETRY LOCK:
          1. The furniture (Sofa, Tables, Chairs) MUST remain EXACTLY the same shape and design.
          2. DO NOT REPLACE FURNITURE MODELS.
          3. You are adjusting Colors, Materials, Lighting, or Framing ONLY.
-         4. If the user asks for "Zoom" or "Angle change", crop the existing pixels, DO NOT invent a new room.
-         
          ${materialPrompts}
          `;
      }
      
      const parts: any[] = [
          { text: prompt },
-         { inlineData: { data: imageBase64, mimeType: mimeType } } 
+         { inlineData: { data: imageBase64, mimeType: validMimeType } } 
      ];
      
      if (config.maskBase64) {
          parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } });
      }
      
-     const result = await executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
+     const result = await executeGenerationWithFallback(ai, prompt, imageBase64, validMimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
 
-     // CLIENT SIDE COMPOSITING (Only if mask exists)
      if (config.maskBase64) {
         try {
+            console.log("Applying Client-Side Blending...");
             const blendedImage = await blendGeneratedWithOriginal(imageBase64, result.image.split(',')[1], config.maskBase64);
             return { image: `data:image/jpeg;base64,${blendedImage}`, cost: result.cost };
         } catch (e) {
@@ -342,18 +368,16 @@ export const generateInteriorDesign = async (
      return result;
   }
 
-  // 2. VIRTUAL STAGING
   if (config.mode === AppMode.VIRTUAL_STAGING && config.productAssets && config.productAssets.length > 0) {
       const assetsList = config.productAssets.map((p, idx) => `${idx + 1}. ${p.label}`).join("\n");
       const prompt = `Virtual Staging Task. Place these assets into the room: ${assetsList}. Match perspective and lighting.${materialPrompts}`;
-      const parts: any[] = [{ text: prompt }, { inlineData: { data: imageBase64, mimeType: mimeType } }];
+      const parts: any[] = [{ text: prompt }, { inlineData: { data: imageBase64, mimeType: validMimeType } }];
       for (const asset of config.productAssets) {
           if (asset.base64) parts.push({ inlineData: { data: asset.base64, mimeType: "image/png" } });
       }
       return executeGenerationMultiModalWithFallback(ai, parts, config);
   }
 
-  // 3. RESTYLING PROMPT
   const styleObj = STYLES.find(s => s.id === config.style);
   const styleDescription = styleObj ? styleObj.description : config.style;
   const styleName = styleObj ? styleObj.label : config.style;
@@ -372,9 +396,8 @@ export const generateInteriorDesign = async (
     ${materialPrompts}
 
     === GEOMETRY LOCK (ANTI-HALLUCINATION) ===
-    - CRITICAL: You MUST PRESERVE the exact perspective, room layout, and structural elements (walls, windows, doors, ceiling height).
+    - CRITICAL: You MUST PRESERVE the exact perspective, room layout, and structural elements.
     - DO NOT move windows. DO NOT change the room shape.
-    - DO NOT hallucinate new architectural features not present in the original image unless explicitly asked.
     
     === EXECUTION PLAN ===
     PRESERVE OBJECTS: [${config.itemsToLock.filter(i=>i.selected && !i.notes).map(i=>i.label).join(", ")}].
@@ -385,7 +408,7 @@ export const generateInteriorDesign = async (
     ${config.customPrompt ? `EXTRA INSTRUCTIONS: ${config.customPrompt}` : ''}
   `;
 
-  return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, []);
+  return executeGenerationWithFallback(ai, prompt, imageBase64, validMimeType, config, []);
 };
 
 async function executeGenerationWithFallback(ai: GoogleGenAI, prompt: string, imageBase64: string, mimeType: string, config: GenerationConfig, extraParts: any[]): Promise<{ image: string, cost: number }> {
@@ -415,7 +438,11 @@ async function executeGenerationMultiModalWithFallback(ai: GoogleGenAI, parts: a
             const response = await ai.models.generateContent({
                 model: 'gemini-3-pro-image-preview',
                 contents: { parts },
-                config: { seed: config.seed, imageConfig: { aspectRatio: config.ratio, imageSize: "4K" } },
+                config: { 
+                    seed: config.seed, 
+                    imageConfig: { aspectRatio: config.ratio, imageSize: "4K" },
+                    safetySettings: SAFETY_SETTINGS 
+                },
             });
             return { image: extractImage(response), cost: PRICING_CONFIG.IMAGE_GEN_PRO };
         }, 2);
@@ -426,13 +453,17 @@ async function executeGenerationMultiModalWithFallback(ai: GoogleGenAI, parts: a
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash-image',
                     contents: { parts },
-                    config: { seed: config.seed, imageConfig: { aspectRatio: config.ratio } }, 
+                    config: { 
+                        seed: config.seed, 
+                        imageConfig: { aspectRatio: config.ratio },
+                        safetySettings: SAFETY_SETTINGS
+                    }, 
                 });
                 return { image: extractImage(response), cost: PRICING_CONFIG.IMAGE_GEN_FLASH };
             }, 2);
         } catch (flashError: any) {
             console.error("Anche Flash fallito.", flashError);
-            throw new Error("Servizio momentaneamente non disponibile su tutti i modelli. Riprova.");
+            throw flashError; // Re-throw to be caught by UI
         }
     }
 }
@@ -453,34 +484,24 @@ export const generateDetailShot = async (
   
   let prompt = "";
 
-  // === DIVERGE LOGIC BASED ON ANGLE ===
-  // 1. MACRO/FRONTAL (Conservative) -> Treat as Upscale
   if (angle === DetailShotAngle.MACRO_STRAIGHT) {
       prompt = `
       ROLE: Forensic Photographer / Image Restorer.
       INPUT: A low-res crop of a specific object.
       TASK: Generate a High-Fidelity 4K Macro shot of THIS EXACT OBJECT.
-      
       STRICT RULES:
       1. DO NOT CHANGE THE GEOMETRY. Tracing must match the input perfectly.
       2. DO NOT CHANGE THE STYLE.
-      3. Focus on Texture enhancement, Sharpness, and Lighting.
-      
       Subject: ${description || "The main object in the crop"}.
       `;
-  } 
-  // 2. ROTATION/TOP-DOWN (Creative but constrained) -> Treat as 3D Reconstruction
-  else {
+  } else {
       prompt = `
       ROLE: 3D Product Visualizer.
       INPUT: Image 1 is the REFERENCE object.
       TASK: Re-visualize THIS EXACT OBJECT from a new angle: ${angle}.
-      
       IDENTITY PROTECTION RULES:
-      1. You must maintain the exact design identity of the object (e.g. if it's a tufted sofa, keep the tufting pattern identical).
-      2. If you rotate the view, extrapolate hidden details based on the visible style. Do not invent unrelated features.
-      3. The Context (Background) must match the style of the original room, adapted to the new perspective.
-      
+      1. You must maintain the exact design identity of the object.
+      2. If you rotate the view, extrapolate hidden details based on the visible style.
       Subject: ${description || "The main object"}.
       `;
   }

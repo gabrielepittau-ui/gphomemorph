@@ -14,11 +14,10 @@ const App: React.FC = () => {
   // === APP CONFIG STATE ===
   const [appMode, setAppMode] = useState<AppMode>(AppMode.RESTYLING);
   const [sessionCost, setSessionCost] = useState<number>(0);
-  const [showAdminPanel, setShowAdminPanel] = useState<boolean>(false); // NEW: Admin Panel State
+  const [showAdminPanel, setShowAdminPanel] = useState<boolean>(false); 
 
   // Initialize Config on Load
   useEffect(() => {
-      // Just ensure config is loaded/defaults set
       ConfigManager.load();
   }, []);
 
@@ -35,26 +34,17 @@ const App: React.FC = () => {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // Generation Parameters - NOW USING DYNAMIC STRINGS FROM JSON
+  // Generation Parameters
   const [selectedStyle, setSelectedStyle] = useState<string>(STYLES[0]?.id || "");
   const [selectedShootingStyle, setSelectedShootingStyle] = useState<string>(MASTER_SHOOTING_STYLES[0]?.id || "");
   const [selectedRatio, setSelectedRatio] = useState<AspectRatio>(AspectRatio.RATIO_16_9);
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [currentRoomType, setCurrentRoomType] = useState<string>(ROOM_TYPES[0]?.id || "");
   
-  // New: Added Items with Details
   const [addedItems, setAddedItems] = useState<AddedItem[]>([]);
-  
-  // New: Product Assets for Virtual Staging
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
-
-  // New: Selected Materials
   const [selectedMaterials, setSelectedMaterials] = useState<MaterialOption[]>([]);
-
-  // === HISTORY STATE ===
   const [history, setHistory] = useState<HistoryItem[]>([]);
-
-  // === CONSISTENCY STATE ===
   const [activeGenerationConfig, setActiveGenerationConfig] = useState<GenerationConfig | null>(null);
 
   // === EXPORT VARIATIONS STATE ===
@@ -75,15 +65,15 @@ const App: React.FC = () => {
   const [detailPoints, setDetailPoints] = useState<DetailPoint[]>([]);
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [cropRect, setCropRect] = useState<{x: number, y: number, width: number, height: number} | null>(null); // In Pixels for display
-  const [viewfinderSize, setViewfinderSize] = useState<number>(150); // Default square size
+  const [cropRect, setCropRect] = useState<{x: number, y: number, width: number, height: number} | null>(null); 
+  const [viewfinderSize, setViewfinderSize] = useState<number>(150); 
   const [mousePos, setMousePos] = useState<{x: number, y: number} | null>(null);
   const [tempDetailPoint, setTempDetailPoint] = useState<{xPercent: number, yPercent: number, widthPercent: number, heightPercent: number, pixelX: number, pixelY: number} | null>(null);
   const [detailDescription, setDetailDescription] = useState<string>('');
   const [selectedDetailAngle, setSelectedDetailAngle] = useState<DetailShotAngle>(DetailShotAngle.THREE_QUARTER);
   const [tempTextureFile, setTempTextureFile] = useState<File | null>(null);
   const [tempTexturePreview, setTempTexturePreview] = useState<string | null>(null);
-  const [tempTextureTiling, setTempTextureTiling] = useState<number>(1); // Default 1x (Macro)
+  const [tempTextureTiling, setTempTextureTiling] = useState<number>(1); 
 
   // Setup API Key
   const checkApiKey = useCallback(async () => {
@@ -145,14 +135,13 @@ const App: React.FC = () => {
     setSessionCost(prev => prev + amount);
   };
 
-  // === MATERIAL LOGIC ===
   const toggleMaterial = (material: MaterialOption) => {
       setSelectedMaterials(prev => {
           const exists = prev.find(m => m.id === material.id);
           if (exists) {
               return prev.filter(m => m.id !== material.id);
           } else {
-              if (prev.length >= 3) return prev; // Limit to 3
+              if (prev.length >= 3) return prev; 
               return [...prev, material];
           }
       });
@@ -194,7 +183,7 @@ const App: React.FC = () => {
           ctx.globalCompositeOperation = 'destination-out';
       } else {
           ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; 
+          ctx.strokeStyle = 'rgba(255, 0, 0, 1.0)'; // Opaque red
       }
   };
 
@@ -250,122 +239,64 @@ const App: React.FC = () => {
       const ctx = tempCanvas.getContext('2d');
       
       if (ctx) {
-          // 1. Draw strokes multiple times to ensure opacity accumulation for semi-transparent brushes
-          ctx.drawImage(maskCanvasRef.current, 0, 0);
-          ctx.drawImage(maskCanvasRef.current, 0, 0);
-          ctx.drawImage(maskCanvasRef.current, 0, 0);
-
-          // 2. Fill colored areas with SOLID WHITE
-          // 'source-in' keeps the alpha of the drawing but replaces the color with the fillStyle
-          ctx.globalCompositeOperation = 'source-in';
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-          
-          // 3. Fill transparent areas with SOLID BLACK
-          // 'destination-over' draws behind existing content
-          ctx.globalCompositeOperation = 'destination-over';
+          // 1. Fill background with BLACK (Protect)
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+          // 2. Draw the strokes
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.drawImage(maskCanvasRef.current, 0, 0);
+
+          // 3. Convert colored strokes to 100% WHITE
+          const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          const data = imageData.data;
+          for (let i = 0; i < data.length; i += 4) {
+              const alpha = data[i + 3];
+              if (alpha > 10) {
+                  data[i] = 255;     // R
+                  data[i + 1] = 255; // G
+                  data[i + 2] = 255; // B
+                  data[i + 3] = 255; // Alpha
+              } else {
+                  data[i] = 0;
+                  data[i + 1] = 0;
+                  data[i + 2] = 0;
+                  data[i + 3] = 255; 
+              }
+          }
+          ctx.putImageData(imageData, 0, 0);
       }
       
       return tempCanvas.toDataURL('image/png').split(',')[1];
   };
 
-  // === SAVE & LOAD PROJECT LOGIC ===
-  const handleSaveProject = () => {
-      if (!file || !previewUrl) return;
-
-      const projectData = {
-          version: "2.1",
-          timestamp: Date.now(),
-          originalFileName,
-          previewUrl,
-          generatedImage,
-          config: activeGenerationConfig ? activeGenerationConfig : {
-              mode: appMode,
-              style: selectedStyle,
-              shootingStyle: selectedShootingStyle,
-              ratio: selectedRatio,
-              itemsToLock: detectedItems,
-              addedItems: addedItems,
-              productAssets: productAssets.map(p => ({...p, file: undefined})), 
-              selectedMaterials: selectedMaterials,
-              customPrompt: customPrompt,
-              seed: undefined 
-          },
-          detectedItems,
-          addedItems,
-          selectedMaterials,
-          detailPoints,
-          history
-      };
-
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-          const base64File = reader.result;
-          const fullProjectData = {
-              ...projectData,
-              originalImageBase64: base64File
-          };
-          
-          const blob = new Blob([JSON.stringify(fullProjectData)], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `Project_${originalFileName}_${Date.now()}.gphm`; 
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-      };
-  };
-
-  const handleLoadProject = (projectFile: File) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-          try {
-              const text = e.target?.result as string;
-              const data = JSON.parse(text);
-              
-              if (data.originalImageBase64) {
-                  const res = await fetch(data.originalImageBase64);
-                  const blob = await res.blob();
-                  const reconstructedFile = new File([blob], data.originalFileName + "_restored", { type: blob.type });
-                  
-                  setFile(reconstructedFile);
-                  setPreviewUrl(data.originalImageBase64);
-                  setOriginalFileName(data.originalFileName);
-                  
-                  if (data.config) {
-                      setAppMode(data.config.mode || AppMode.RESTYLING);
-                      setSelectedStyle(data.config.style || STYLES[0].id);
-                      setSelectedShootingStyle(data.config.shootingStyle || MASTER_SHOOTING_STYLES[0].id);
-                      setSelectedRatio(data.config.ratio || AspectRatio.RATIO_16_9);
-                      setCustomPrompt(data.config.customPrompt || '');
-                      setActiveGenerationConfig(data.config);
-                  }
-                  
-                  setDetectedItems(data.detectedItems || []);
-                  setAddedItems(data.addedItems || []);
-                  setSelectedMaterials(data.selectedMaterials || []);
-                  setGeneratedImage(data.generatedImage || null);
-                  setDetailPoints(data.detailPoints || []);
-                  setHistory(data.history || []);
-                  
-                  setError(null);
-                  setVariationResults([]);
-              }
-          } catch (err) {
-              console.error("Failed to load project", err);
-              setError("Impossibile caricare il file di progetto. Formato non valido.");
-          }
-      };
-      reader.readAsText(projectFile);
-  };
-
-  // === DESIGN HANDLERS ===
+  // ... App logic ...
+  const handleSaveProject = () => { if (!file || !previewUrl) return; const projectData = { version: "2.1", timestamp: Date.now(), originalFileName, previewUrl, generatedImage, config: activeGenerationConfig ? activeGenerationConfig : { mode: appMode, style: selectedStyle, shootingStyle: selectedShootingStyle, ratio: selectedRatio, itemsToLock: detectedItems, addedItems: addedItems, productAssets: productAssets.map(p => ({...p, file: undefined})), selectedMaterials: selectedMaterials, customPrompt: customPrompt, seed: undefined }, detectedItems, addedItems, selectedMaterials, detailPoints, history }; const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => { const base64File = reader.result; const fullProjectData = { ...projectData, originalImageBase64: base64File }; const blob = new Blob([JSON.stringify(fullProjectData)], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `Project_${originalFileName}_${Date.now()}.gphm`; document.body.appendChild(link); link.click(); document.body.removeChild(link); }; };
+  const handleLoadProject = (projectFile: File) => { const reader = new FileReader(); reader.onload = async (e) => { try { const text = e.target?.result as string; const data = JSON.parse(text); if (data.originalImageBase64) { const res = await fetch(data.originalImageBase64); const blob = await res.blob(); const reconstructedFile = new File([blob], data.originalFileName + "_restored", { type: blob.type }); setFile(reconstructedFile); setPreviewUrl(data.originalImageBase64); setOriginalFileName(data.originalFileName); if (data.config) { setAppMode(data.config.mode || AppMode.RESTYLING); setSelectedStyle(data.config.style || STYLES[0].id); setSelectedShootingStyle(data.config.shootingStyle || MASTER_SHOOTING_STYLES[0].id); setSelectedRatio(data.config.ratio || AspectRatio.RATIO_16_9); setCustomPrompt(data.config.customPrompt || ''); setActiveGenerationConfig(data.config); } setDetectedItems(data.detectedItems || []); setAddedItems(data.addedItems || []); setSelectedMaterials(data.selectedMaterials || []); setGeneratedImage(data.generatedImage || null); setDetailPoints(data.detailPoints || []); setHistory(data.history || []); setError(null); setVariationResults([]); } } catch (err) { console.error("Failed to load project", err); setError("Impossibile caricare il file di progetto. Formato non valido."); } }; reader.readAsText(projectFile); };
   const processFile = async (selectedFile: File) => { if (selectedFile.name.endsWith('.gphm') || selectedFile.type === 'application/json') { handleLoadProject(selectedFile); return; } if (selectedFile.size > 20 * 1024 * 1024) { setError("File troppo grande. Per favore carica un'immagine inferiore a 20MB."); return; } setFile(selectedFile); const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, ""); setOriginalFileName(nameWithoutExt); setGeneratedImage(null); setActiveGenerationConfig(null); setError(null); setDetectedItems([]); setAddedItems([]); setVariationResults([]); setDetailPoints([]); setHistory([]); setHasMask(false); setSelectedMaterials([]); const objectUrl = URL.createObjectURL(selectedFile); setPreviewUrl(objectUrl); if (apiKeyReady) { await analyzeImage(selectedFile); } };
-  const analyzeImage = async (imageFile: File) => { setIsAnalyzing(true); try { const base64 = await fileToBase64(imageFile); const { items, cost } = await detectFurniture(base64, imageFile.type); setDetectedItems(items); addToSessionCost(cost); } catch (err) { console.error(err); setError("Impossibile analizzare l'immagine. Riprova."); } finally { setIsAnalyzing(false); } };
+  
+  // FIXED ANALYZE IMAGE
+  const analyzeImage = async (imageFile: File) => { 
+      setIsAnalyzing(true); 
+      setError(null);
+      try { 
+          const base64 = await fileToBase64(imageFile); 
+          const { items, cost } = await detectFurniture(base64, imageFile.type); 
+          setDetectedItems(items); 
+          addToSessionCost(cost); 
+      } catch (err: any) { 
+          console.error(err); 
+          if (err.message && err.message.includes("API Key")) {
+              setError("Errore API Key: La chiave non è valida o manca.");
+              setApiKeyReady(false);
+          } else {
+              setError("Analisi non riuscita. L'immagine potrebbe essere troppo complessa o il server occupato."); 
+          }
+      } finally { 
+          setIsAnalyzing(false); 
+      } 
+  };
+  
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => { if (event.target.files && event.target.files[0]) { await processFile(event.target.files[0]); } };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
   const handleDrop = async (e: React.DragEvent) => { e.preventDefault(); if (e.dataTransfer.files && e.dataTransfer.files[0]) { await processFile(e.dataTransfer.files[0]); } };
@@ -377,75 +308,59 @@ const App: React.FC = () => {
   const handleProductUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const previewUrl = URL.createObjectURL(file); const base64 = await fileToBase64(file); setProductAssets(prev => [ ...prev, { id: `prod-${Date.now()}`, file, previewUrl, base64, label: "Nuovo Prodotto" } ]); } };
   const removeProductAsset = (id: string) => { setProductAssets(prev => prev.filter(p => p.id !== id)); };
   const updateProductLabel = (id: string, label: string) => { setProductAssets(prev => prev.map(p => p.id === id ? { ...p, label } : p)); };
-
   const startProgressSimulation = () => { setProgress(0); setLoadingStage('Analisi geometrica...'); if (progressInterval.current) clearInterval(progressInterval.current); progressInterval.current = setInterval(() => { setProgress((prev) => { let increment = 0; if (prev < 30) increment = 2; else if (prev < 60) increment = 0.5; else if (prev < 85) increment = 0.2; else if (prev < 95) increment = 0.05; const newProgress = Math.min(prev + increment, 98); let modeLabel = 'Applicazione stile...'; if (appMode === AppMode.EDITING) modeLabel = 'Modifica puntuale...'; if (appMode === AppMode.VIRTUAL_STAGING) modeLabel = 'Composizione prodotti...'; if (newProgress > 10 && newProgress < 30) setLoadingStage(modeLabel); if (newProgress > 30 && newProgress < 50) setLoadingStage(appMode === AppMode.VIRTUAL_STAGING ? 'Armonizzazione luci...' : 'Integrazione elementi...'); if (newProgress > 50 && newProgress < 75) setLoadingStage('Rendering volumetrico...'); if (newProgress > 75) setLoadingStage('Finitura 4K...'); return newProgress; }); }, 100); };
+  
+  // FIXED GENERATE DESIGN with BETTER ERROR HANDLING
+  const handleGenerateDesign = async () => { 
+      if (!file || !apiKeyReady) return; 
+      setIsGenerating(true); 
+      setVariationResults([]); 
+      setDetailPoints([]); 
+      setError(null); 
+      startProgressSimulation(); 
+      try { 
+          const base64 = await fileToBase64(file); 
+          const seed = Math.floor(Math.random() * 2147483647); 
+          const maskBase64 = getMaskBase64(); 
+          const config: GenerationConfig = { mode: appMode, style: selectedStyle, shootingStyle: selectedShootingStyle, ratio: selectedRatio, itemsToLock: detectedItems, addedItems: addedItems, productAssets: productAssets, selectedMaterials: selectedMaterials, customPrompt: customPrompt, maskBase64: maskBase64, seed: seed }; 
+          const { image, cost } = await generateInteriorDesign(base64, config, file.type); 
+          addToSessionCost(cost); 
+          if (progressInterval.current) clearInterval(progressInterval.current); 
+          setProgress(100); 
+          setLoadingStage('Completato!'); 
+          setTimeout(() => { 
+              setGeneratedImage(image); 
+              setActiveGenerationConfig(config); 
+              setIsGenerating(false); 
+              const newItem: HistoryItem = { id: Date.now().toString(), timestamp: Date.now(), previewUrl: previewUrl!, generatedImage: image, config: config, detectedItems: [...detectedItems], addedItems: [...addedItems] }; 
+              setHistory(prev => [newItem, ...prev]); 
+          }, 400); 
+      } catch (err: any) { 
+          console.error("Errore Generazione:", err); 
+          if (progressInterval.current) clearInterval(progressInterval.current); 
+          setIsGenerating(false); 
 
-  const handleGenerateDesign = async () => {
-    if (!file || !apiKeyReady) return;
-    setIsGenerating(true);
-    setVariationResults([]); 
-    setDetailPoints([]);
-    setError(null);
-    startProgressSimulation();
-
-    try {
-      const base64 = await fileToBase64(file);
-      const seed = Math.floor(Math.random() * 2147483647);
-      const maskBase64 = getMaskBase64();
-      
-      const config: GenerationConfig = {
-        mode: appMode,
-        style: selectedStyle,
-        shootingStyle: selectedShootingStyle,
-        ratio: selectedRatio,
-        itemsToLock: detectedItems,
-        addedItems: addedItems,
-        productAssets: productAssets,
-        selectedMaterials: selectedMaterials, 
-        customPrompt: customPrompt,
-        maskBase64: maskBase64,
-        seed: seed 
-      };
-
-      const { image, cost } = await generateInteriorDesign(base64, config, file.type);
-      addToSessionCost(cost);
-
-      if (progressInterval.current) clearInterval(progressInterval.current);
-      setProgress(100);
-      setLoadingStage('Completato!');
-      
-      setTimeout(() => {
-        setGeneratedImage(image);
-        setActiveGenerationConfig(config);
-        setIsGenerating(false);
-        const newItem: HistoryItem = { id: Date.now().toString(), timestamp: Date.now(), previewUrl: previewUrl!, generatedImage: image, config: config, detectedItems: [...detectedItems], addedItems: [...addedItems] };
-        setHistory(prev => [newItem, ...prev]);
-      }, 400);
-
-    } catch (err: any) {
-      console.error(err);
-      if (progressInterval.current) clearInterval(progressInterval.current);
-      setIsGenerating(false);
-      if (err && err.message && err.message.includes("Requested entity was not found")) { setError("Errore API Key. Per favore seleziona nuovamente la tua chiave."); setApiKeyReady(false); } else { setError("Generazione fallita. Il servizio potrebbe essere sovraccarico, riprova tra poco."); }
-    }
+          let errorMsg = "Generazione fallita.";
+          if (err && err.message) {
+              if (err.message.includes("403") || err.message.includes("API Key")) {
+                  errorMsg = "Errore API Key: Chiave non valida o permessi insufficienti.";
+                  setApiKeyReady(false);
+              } else if (err.message.includes("400") || err.message.includes("Safety")) {
+                  // Even with BLOCK_NONE, sometimes safety triggers or bad request
+                  errorMsg = `Errore Tecnico (${err.message.substring(0, 50)}...). Prova a cambiare prompt o immagine.`;
+              } else if (err.message.includes("503") || err.message.includes("Overloaded")) {
+                  errorMsg = "Servizio momentaneamente sovraccarico. Riprova tra 30 secondi.";
+              } else {
+                  errorMsg = `Errore: ${err.message}`;
+              }
+          }
+          setError(errorMsg);
+      } 
   };
-
-  const restoreFromHistory = (item: HistoryItem) => {
-      setGeneratedImage(item.generatedImage);
-      setActiveGenerationConfig(item.config);
-      setDetectedItems(item.detectedItems);
-      setAddedItems(item.addedItems);
-      setAppMode(item.config.mode);
-      setSelectedStyle(item.config.style);
-      setSelectedShootingStyle(item.config.shootingStyle);
-      setSelectedRatio(item.config.ratio);
-      setSelectedMaterials(item.config.selectedMaterials || []);
-      setCustomPrompt(item.config.customPrompt || '');
-  };
-
+  
+  const restoreFromHistory = (item: HistoryItem) => { setGeneratedImage(item.generatedImage); setActiveGenerationConfig(item.config); setDetectedItems(item.detectedItems); setAddedItems(item.addedItems); setAppMode(item.config.mode); setSelectedStyle(item.config.style); setSelectedShootingStyle(item.config.shootingStyle); setSelectedRatio(item.config.ratio); setSelectedMaterials(item.config.selectedMaterials || []); setCustomPrompt(item.config.customPrompt || ''); };
   const handleDownload = (url: string, ratio?: string) => { if (url) { const link = document.createElement('a'); link.href = url; const styleCode = STYLES.find(s => s.id === selectedStyle)?.code || '00'; const shotCode = MASTER_SHOOTING_STYLES.find(s => s.id === selectedShootingStyle)?.code || 'X'; const ratioSuffix = ratio ? `_${ratio.replace(':', '-')}` : ''; const finalName = `GP${originalFileName}${styleCode}${shotCode}${ratioSuffix}.png`; link.download = finalName; document.body.appendChild(link); link.click(); document.body.removeChild(link); } };
   const handleDownloadPDF = async () => { if (!previewUrl || !generatedImage || !activeGenerationConfig) return; let originalBase64 = previewUrl; if (previewUrl.startsWith('blob:')) { const res = await fetch(previewUrl); const blob = await res.blob(); originalBase64 = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); }); } await generateMoodboardPDF(originalBase64, generatedImage, activeGenerationConfig, originalFileName); };
-  
   const openExportModal = () => { const currentRatio = activeGenerationConfig?.ratio || selectedRatio; const available = ASPECT_RATIOS.filter(r => r.id !== currentRatio).map(r => r.id); setSelectedExportRatios(available); setShowExportModal(true); };
   const toggleExportRatio = (ratio: AspectRatio) => { setSelectedExportRatios(prev => prev.includes(ratio) ? prev.filter(r => r !== ratio) : [...prev, ratio] ); };
   const generateVariations = async () => { if (!file || selectedExportRatios.length === 0 || !activeGenerationConfig) return; setIsProcessingVariations(true); const initialResults = selectedExportRatios.map(ratio => ({ ratio, url: '', loading: true })); setVariationResults(initialResults); try { const base64 = await fileToBase64(file); for (const ratio of selectedExportRatios) { try { const config: GenerationConfig = { ...activeGenerationConfig, ratio: ratio, }; const { image, cost } = await generateInteriorDesign(base64, config, file.type); addToSessionCost(cost); setVariationResults(prev => prev.map(item => item.ratio === ratio ? { ...item, url: image, loading: false } : item)); } catch (error) { console.error(`Failed to generate ratio ${ratio}`, error); setVariationResults(prev => prev.map(item => item.ratio === ratio ? { ...item, loading: false } : item)); } } } catch (err) { console.error("Batch process error", err); } finally { setIsProcessingVariations(false); } };
@@ -464,10 +379,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#F5F5F7] text-gray-900 flex flex-col md:flex-row font-sans selection:bg-[#8B0000] selection:text-white">
       {isGenerating && ( <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center animate-in fade-in duration-300"> <div className="text-[120px] leading-none font-light text-slate-800 tracking-tighter tabular-nums">{Math.round(progress)}%</div> <div className="w-64 h-1.5 bg-gray-100 rounded-full mt-8 mb-6 overflow-hidden"><div className="h-full bg-[#8B0000] transition-all duration-300 ease-out" style={{ width: `${progress}%` }} /></div> <h2 className="text-xl font-bold tracking-widest text-black uppercase mb-2">GENERAZIONE RENDER</h2> <p className="text-gray-400 font-medium text-sm">{loadingStage}</p> </div> )}
       
-      {/* ADMIN PANEL OVERLAY */}
-      {showAdminPanel && (
-          <AdminPanel onClose={() => setShowAdminPanel(false)} onSave={() => window.location.reload()} />
-      )}
+      {showAdminPanel && (<AdminPanel onClose={() => setShowAdminPanel(false)} onSave={() => window.location.reload()} />)}
 
       <aside className="w-full md:w-[380px] bg-white border-r border-gray-200 h-auto md:h-screen overflow-y-auto z-10 p-6 flex flex-col gap-8 shadow-[4px_0_24px_rgba(0,0,0,0.01)] scroll-smooth relative">
         <div className="space-y-4">
@@ -481,7 +393,6 @@ const App: React.FC = () => {
              <button onClick={() => setAppMode(AppMode.VIRTUAL_STAGING)} className={`w-full py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex items-center justify-center gap-2 ${appMode === AppMode.VIRTUAL_STAGING ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Package className="w-3 h-3" /> Virtual Staging (Prodotti)</button>
         </div>
         <div className="animate-in fade-in slide-in-from-left-4 duration-300 space-y-8">
-            {/* MATERIAL UI SECTION */}
             {appMode !== AppMode.EDITING && (
                 <div className="space-y-4">
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2"><Droplet className="w-3.5 h-3.5" /> Materiali & Finiture</label>
@@ -489,22 +400,13 @@ const App: React.FC = () => {
                         {MATERIALS.map((mat) => {
                             const isSelected = selectedMaterials.some(m => m.id === mat.id);
                             return (
-                                <button 
-                                    key={mat.id} 
-                                    onClick={() => toggleMaterial(mat)}
-                                    className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all flex flex-col items-center ${isSelected ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200'}`}
-                                >
-                                    <span>{mat.label}</span>
-                                </button>
+                                <button key={mat.id} onClick={() => toggleMaterial(mat)} className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all flex flex-col items-center ${isSelected ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200'}`}><span>{mat.label}</span></button>
                             );
                         })}
                     </div>
-                    {selectedMaterials.length > 0 && (
-                        <div className="text-[10px] text-gray-400 px-1">Selezionati: {selectedMaterials.map(m => m.label).join(", ")}</div>
-                    )}
+                    {selectedMaterials.length > 0 && (<div className="text-[10px] text-gray-400 px-1">Selezionati: {selectedMaterials.map(m => m.label).join(", ")}</div>)}
                 </div>
             )}
-
             {appMode === AppMode.EDITING && (
                 <div className="bg-red-50 p-4 rounded-2xl border border-red-100 relative">
                     <h3 className="text-[#8B0000] font-bold text-sm mb-2 flex items-center gap-2"><Edit3 className="w-4 h-4"/> Modalità Modifica</h3>
@@ -536,40 +438,12 @@ const App: React.FC = () => {
             <div className="space-y-4"> <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2"><Camera className="w-3.5 h-3.5" /> Shooting</label> <div className="grid grid-cols-1 gap-2"> {MASTER_SHOOTING_STYLES.map((style) => ( <button key={style.id} onClick={() => setSelectedShootingStyle(style.id)} className={`w-full px-4 py-3 rounded-xl text-left border ${selectedShootingStyle === style.id ? 'bg-gray-900 text-white border-gray-900 shadow-lg' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}><div className="flex items-center gap-3"><span className="font-mono w-6 text-xs opacity-60">{style.code}</span><span className="text-sm font-bold uppercase">{style.label}</span></div></button> ))} </div> </div>
             <div className="space-y-4"> <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Prompt Extra</label> <textarea className="w-full bg-gray-50 border border-transparent rounded-2xl p-4 text-sm focus:bg-white focus:ring-2 focus:ring-[#8B0000] outline-none h-20" placeholder="Note aggiuntive..." value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} /> </div>
             <div className="space-y-4"> <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2"><LayoutTemplate className="w-3.5 h-3.5" /> Formato</label> <div className="flex flex-wrap gap-2"> {ASPECT_RATIOS.map((ratio) => ( <button key={ratio.id} onClick={() => setSelectedRatio(ratio.id)} className={`px-3 py-2 text-[11px] font-bold uppercase rounded-lg border ${selectedRatio === ratio.id ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>{ratio.label.split(' ')[0]}</button> ))} </div> </div>
-            
-            {/* HISTORY BAR IN SIDEBAR */}
-            {history.length > 0 && (
-                <div className="space-y-4">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2">
-                        <History className="w-3.5 h-3.5" /> Cronologia
-                    </label>
-                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                        {history.map((item) => (
-                            <button 
-                                key={item.id} 
-                                onClick={() => restoreFromHistory(item)}
-                                className={`relative flex-shrink-0 w-16 h-12 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${generatedImage === item.generatedImage ? 'border-[#8B0000] ring-2 ring-red-100' : 'border-transparent opacity-70 hover:opacity-100'}`}
-                            >
-                                <img src={item.generatedImage} className="w-full h-full object-cover" />
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ADMIN BUTTON */}
-            <div className="pt-8 border-t border-gray-100 flex justify-center pb-24 md:pb-8"> {/* Added padding bottom for mobile */}
-                <button onClick={() => setShowAdminPanel(true)} className="text-gray-300 hover:text-gray-500 p-2 rounded-full transition-colors" title="Admin Settings">
-                    <Lock className="w-4 h-4" />
-                </button>
-            </div>
+            {history.length > 0 && ( <div className="space-y-4"> <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2"><History className="w-3.5 h-3.5" /> Cronologia</label> <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar"> {history.map((item) => ( <button key={item.id} onClick={() => restoreFromHistory(item)} className={`relative flex-shrink-0 w-16 h-12 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${generatedImage === item.generatedImage ? 'border-[#8B0000] ring-2 ring-red-100' : 'border-transparent opacity-70 hover:opacity-100'}`}><img src={item.generatedImage} className="w-full h-full object-cover" /></button> ))} </div> </div> )}
+            <div className="pt-8 border-t border-gray-100 flex justify-center pb-24 md:pb-8"> <button onClick={() => setShowAdminPanel(true)} className="text-gray-300 hover:text-gray-500 p-2 rounded-full transition-colors" title="Admin Settings"><Lock className="w-4 h-4" /></button> </div>
         </div>
       </aside>
 
       <main className="flex-1 relative flex flex-col h-full md:h-screen overflow-hidden bg-[#F5F5F7]">
-            {/* ... (Main Content Remains Same - Already Included in Full Block) ... */}
-            {/* ... (To save tokens, I am not repeating the entire Main block as it was provided correctly in previous turn, but for a COMPLETE overwrite, I will include the critical structure below) ... */}
-            
             <header className="h-16 bg-white/70 backdrop-blur-xl border-b border-gray-200/50 flex items-center justify-between px-8 z-20 sticky top-0">
                 <div className="flex items-center gap-3 text-xs font-semibold tracking-wide"> <div className="flex items-center gap-2 text-[#8B0000]"><span>GP HomeMorph</span><ArrowRight className="w-3 h-3 text-gray-300" /><span>{appMode === AppMode.EDITING ? 'Smart Edit' : appMode === AppMode.VIRTUAL_STAGING ? 'Virtual Staging' : 'Restyling'}</span></div> </div>
                 <div className="flex gap-2">
@@ -607,26 +481,13 @@ const App: React.FC = () => {
                                 <div className="relative w-full h-[75vh] bg-white rounded-[2rem] overflow-hidden border border-dashed border-gray-200 shadow-sm flex items-center justify-center"> {generatedImage ? <img src={generatedImage} alt="Generated" className="w-full h-full object-contain p-2" /> : !isGenerating && <div className="text-center opacity-40"><ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-2" /><p className="text-sm font-semibold">Pronto a generare</p></div>} </div>
                             </div>
                         </div>
-
-                        {/* STICKY MOBILE GENERATE BUTTON */}
-                        <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 z-50 flex justify-center shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-                            <button onClick={handleGenerateDesign} disabled={!file || isGenerating || isAnalyzing} className={`w-full max-w-sm px-8 py-3.5 rounded-full font-bold text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${!file || isGenerating || isAnalyzing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#8B0000] text-white hover:bg-[#660000]'}`}>
-                                {isGenerating ? 'Elaborazione...' : <><Sparkles className="w-5 h-5" /> Genera</>}
-                            </button>
-                        </div>
-
-                        {/* DESKTOP GENERATE BUTTON */}
-                        <div className="hidden md:flex justify-center pb-4">
-                            <button onClick={handleGenerateDesign} disabled={!file || isGenerating || isAnalyzing} className={`px-12 py-4 rounded-full font-bold text-base shadow-xl transition-all flex items-center gap-3 ${!file || isGenerating || isAnalyzing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#8B0000] text-white hover:bg-[#660000]'}`}>
-                                {isGenerating ? 'Elaborazione...' : <><Sparkles className="w-5 h-5" /> {appMode === AppMode.EDITING ? 'Applica Modifiche' : appMode === AppMode.VIRTUAL_STAGING ? 'Componi Stanza' : 'Genera Design'}</>}
-                            </button>
-                        </div>
+                        <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 z-50 flex justify-center shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"> <button onClick={handleGenerateDesign} disabled={!file || isGenerating || isAnalyzing} className={`w-full max-w-sm px-8 py-3.5 rounded-full font-bold text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${!file || isGenerating || isAnalyzing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#8B0000] text-white hover:bg-[#660000]'}`}>{isGenerating ? 'Elaborazione...' : <><Sparkles className="w-5 h-5" /> Genera</>}</button> </div>
+                        <div className="hidden md:flex justify-center pb-4"> <button onClick={handleGenerateDesign} disabled={!file || isGenerating || isAnalyzing} className={`px-12 py-4 rounded-full font-bold text-base shadow-xl transition-all flex items-center gap-3 ${!file || isGenerating || isAnalyzing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#8B0000] text-white hover:bg-[#660000]'}`}>{isGenerating ? 'Elaborazione...' : <><Sparkles className="w-5 h-5" /> {appMode === AppMode.EDITING ? 'Applica Modifiche' : appMode === AppMode.VIRTUAL_STAGING ? 'Componi Stanza' : 'Genera Design'}</>}</button> </div>
                     </div>
                 )}
             </div>
       </main>
 
-      {/* MODALS AND OVERLAYS (Export, Detail, etc) - Kept same as previous */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95">
