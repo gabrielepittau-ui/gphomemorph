@@ -200,7 +200,7 @@ export const detectFurniture = async (
       console.error("Detection Error:", error);
       throw error;
     }
-  }); 
+  });
 };
 
 export const generateInteriorDesign = async (
@@ -212,9 +212,15 @@ export const generateInteriorDesign = async (
   if (!apiKey) throw new Error("API Key mancante.");
   const ai = new GoogleGenAI({ apiKey });
 
+  // === MATERIAL PROMPT BUILDING ===
+  // Extract selected materials prompts
+  const materialPrompts = config.selectedMaterials && config.selectedMaterials.length > 0
+      ? `\n=== STRICT MATERIAL PALETTE ===\nUse ONLY these materials for relevant objects:\n${config.selectedMaterials.map(m => `- ${m.prompt}`).join("\n")}\n`
+      : "";
+
   // 1. EDIT MODE PROMPT (MAGIC MASKING)
   if (config.mode === AppMode.EDITING) {
-     let prompt = `You are an expert interior design editor. TASK: Modify ONLY specific elements based on request: "${config.customPrompt}". PRESERVE everything else pixel-perfect.`;
+     let prompt = `You are an expert interior design editor. TASK: Modify ONLY specific elements based on request: "${config.customPrompt}". PRESERVE everything else pixel-perfect.${materialPrompts}`;
      
      // Base input
      const parts: any[] = [
@@ -234,7 +240,7 @@ export const generateInteriorDesign = async (
   // 2. VIRTUAL STAGING PROMPT
   if (config.mode === AppMode.VIRTUAL_STAGING && config.productAssets && config.productAssets.length > 0) {
       const assetsList = config.productAssets.map((p, idx) => `${idx + 1}. ${p.label}`).join("\n");
-      const prompt = `Virtual Staging Task. Place these assets into the room: ${assetsList}. Match perspective and lighting.`;
+      const prompt = `Virtual Staging Task. Place these assets into the room: ${assetsList}. Match perspective and lighting.${materialPrompts}`;
       const parts: any[] = [{ text: prompt }, { inlineData: { data: imageBase64, mimeType: mimeType } }];
       for (const asset of config.productAssets) {
           if (asset.base64) parts.push({ inlineData: { data: asset.base64, mimeType: "image/png" } });
@@ -252,6 +258,8 @@ export const generateInteriorDesign = async (
     Style: ${styleObj?.label}. Description: ${styleDescription}.
     Shooting: ${shootingObj?.label}.
     
+    ${materialPrompts}
+
     PRESERVE: [${config.itemsToLock.filter(i=>i.selected && !i.notes).map(i=>i.label).join(", ")}].
     MODIFY: ${config.itemsToLock.filter(i=>i.selected && i.notes).map(i=>`${i.label} -> ${i.notes}`).join("; ")}.
     ADD: ${config.addedItems.map(i=>i.label + " " + i.detail).join(", ")}.

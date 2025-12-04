@@ -1,5 +1,5 @@
 
-import { ArchitecturalStyle, AspectRatio, RoomType, MasterShootingStyle } from './types';
+import { ArchitecturalStyle, AspectRatio, RoomType, MasterShootingStyle, MaterialOption } from './types';
 import { Layout, Armchair, BedDouble, ChefHat, Utensils, Monitor, Bath, Users, Frame } from 'lucide-react';
 
 // === PRICING CONFIGURATION (USD Estimate) ===
@@ -172,3 +172,26 @@ export const ROOM_ADDONS: Record<RoomType, string[]> = {
   [RoomType.BATHROOM]: ['Set spa', 'Candele', 'Piante umidità', 'Cesto vimini', 'Specchio led'],
   [RoomType.ART_DECOR]: ['Astratto materico', 'Tela grande formato', 'Minimalista', 'Fotografia B&N', 'Opera geometrica', 'Dittico moderno']
 };
+
+// === NEW: HIGH-END MATERIALS LIBRARY ===
+export const MATERIALS: MaterialOption[] = [
+    // FABRICS
+    { id: 'f_mohair', label: 'Velluto Mohair', category: 'Fabric', prompt: 'High-pile luxurious Mohair Velvet, soft sheen, deep texture, visible fibers.' },
+    { id: 'f_linen', label: 'Lino Belga Grezzo', category: 'Fabric', prompt: 'Heavyweight Belgian Linen, raw natural weave, organic creases, matte finish.' },
+    { id: 'f_boucle', label: 'Lana Bouclé', category: 'Fabric', prompt: 'Creamy Bouclé Wool, nubby texture, soft and tactile, cozy appearance.' },
+    { id: 'f_leather', label: 'Pelle Anilina', category: 'Fabric', prompt: 'Full-grain Aniline Leather, natural patina, soft buttery texture, slight imperfections.' },
+    
+    // WOODS
+    { id: 'w_walnut', label: 'Noce Canaletto', category: 'Wood', prompt: 'American Black Walnut (Canaletto), rich dark grain, satin finish, premium joinery.' },
+    { id: 'w_oak', label: 'Rovere Sbiancato', category: 'Wood', prompt: 'White Oak (Bleached), pale Scandinavian tone, matte oil finish, visible wood grain.' },
+    { id: 'w_ebony', label: 'Ebano Macassar', category: 'Wood', prompt: 'Macassar Ebony, dramatic high-contrast grain, high-gloss piano finish, luxury veneer.' },
+    
+    // STONES
+    { id: 's_calacatta', label: 'Marmo Calacatta', category: 'Stone', prompt: 'Calacatta Gold Marble, white background with dramatic gold and grey veining, honed finish.' },
+    { id: 's_travertine', label: 'Travertino Romano', category: 'Stone', prompt: 'Roman Travertine, unfilled texture, warm beige tones, horizontal vein cut, matte stone.' },
+    { id: 's_slate', label: 'Ardesia Nera', category: 'Stone', prompt: 'Natural Black Slate, riven texture, dark charcoal grey, matte rocky surface.' },
+    
+    // METALS
+    { id: 'm_brass', label: 'Ottone Brunito', category: 'Metal', prompt: 'Burnished Brass, antiqued gold tone, brushed texture, warm metallic reflection.' },
+    { id: 'm_steel', label: 'Acciaio Nero', category: 'Metal', prompt: 'Blackened Steel, industrial look, matte charcoal finish, slight welding marks.' }
+];

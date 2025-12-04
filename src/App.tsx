@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Upload, Image as ImageIcon, Download, Sparkles, X, AlertCircle, ScanEye, CheckSquare, Edit3, ArrowRight, Palette, LayoutTemplate, Layers, Camera, Plus, Armchair, BarChart3, Building, Users, Target, Briefcase, FileText, Coins, Save, Package, Trash2, History, ZoomIn, Copy, Check, Loader2, MousePointer2, Grid3X3, Brush, Eraser } from 'lucide-react';
-import { ArchitecturalStyle, AspectRatio, GenerationConfig, DetectedItem, MasterShootingStyle, RoomType, AppMode, AddedItem, DetailPoint, DetailShotAngle, ProductAsset, HistoryItem } from './types';
-import { STYLES, ASPECT_RATIOS, MASTER_SHOOTING_STYLES, ROOM_TYPES, ROOM_ADDONS } from './constants';
+import { Upload, Image as ImageIcon, Download, Sparkles, X, AlertCircle, ScanEye, CheckSquare, Edit3, ArrowRight, Palette, LayoutTemplate, Layers, Camera, Plus, Armchair, BarChart3, Building, Users, Target, Briefcase, FileText, Coins, Save, Package, Trash2, History, ZoomIn, Copy, Check, Loader2, MousePointer2, Grid3X3, Brush, Eraser, Droplet } from 'lucide-react';
+import { ArchitecturalStyle, AspectRatio, GenerationConfig, DetectedItem, MasterShootingStyle, RoomType, AppMode, AddedItem, DetailPoint, DetailShotAngle, ProductAsset, HistoryItem, MaterialOption } from './types';
+import { STYLES, ASPECT_RATIOS, MASTER_SHOOTING_STYLES, ROOM_TYPES, ROOM_ADDONS, MATERIALS } from './constants';
 import { fileToBase64, generateInteriorDesign, detectFurniture, generateDetailShot } from './services/geminiService';
 import { generateMoodboardPDF } from './services/pdfService';
 
@@ -40,6 +40,9 @@ const App: React.FC = () => {
   // New: Product Assets for Virtual Staging
   const [productAssets, setProductAssets] = useState<ProductAsset[]>([]);
 
+  // New: Selected Materials
+  const [selectedMaterials, setSelectedMaterials] = useState<MaterialOption[]>([]);
+
   // === HISTORY STATE ===
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
@@ -64,18 +67,12 @@ const App: React.FC = () => {
   const [detailPoints, setDetailPoints] = useState<DetailPoint[]>([]);
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Interaction State for Viewfinder
   const [cropRect, setCropRect] = useState<{x: number, y: number, width: number, height: number} | null>(null); // In Pixels for display
   const [viewfinderSize, setViewfinderSize] = useState<number>(150); // Default square size
   const [mousePos, setMousePos] = useState<{x: number, y: number} | null>(null);
-
-  // New: Temp point state for Input Dialog
   const [tempDetailPoint, setTempDetailPoint] = useState<{xPercent: number, yPercent: number, widthPercent: number, heightPercent: number, pixelX: number, pixelY: number} | null>(null);
   const [detailDescription, setDetailDescription] = useState<string>('');
   const [selectedDetailAngle, setSelectedDetailAngle] = useState<DetailShotAngle>(DetailShotAngle.THREE_QUARTER);
-  
-  // New: Texture Reference State
   const [tempTextureFile, setTempTextureFile] = useState<File | null>(null);
   const [tempTexturePreview, setTempTexturePreview] = useState<string | null>(null);
   const [tempTextureTiling, setTempTextureTiling] = useState<number>(1); // Default 1x (Macro)
@@ -112,7 +109,6 @@ const App: React.FC = () => {
     checkApiKey();
   }, [checkApiKey]);
 
-  // Handle Canvas Resizing
   useEffect(() => {
       if (appMode === AppMode.EDITING && previewUrl && maskCanvasRef.current) {
           const img = new Image();
@@ -141,8 +137,21 @@ const App: React.FC = () => {
     setSessionCost(prev => prev + amount);
   };
 
-  // === MASKING LOGIC ===
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // === MATERIAL LOGIC ===
+  const toggleMaterial = (material: MaterialOption) => {
+      setSelectedMaterials(prev => {
+          const exists = prev.find(m => m.id === material.id);
+          if (exists) {
+              return prev.filter(m => m.id !== material.id);
+          } else {
+              if (prev.length >= 3) return prev; // Limit to 3
+              return [...prev, material];
+          }
+      });
+  };
+
+  // === MASKING LOGIC (UPDATED FOR TOUCH) ===
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
       if (!maskCanvasRef.current) return;
       const canvas = maskCanvasRef.current;
       const ctx = canvas.getContext('2d');
@@ -154,8 +163,18 @@ const App: React.FC = () => {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
+      
+      let clientX, clientY;
+      if ('touches' in e) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+      } else {
+          clientX = (e as React.MouseEvent).clientX;
+          clientY = (e as React.MouseEvent).clientY;
+      }
+
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
 
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -167,11 +186,11 @@ const App: React.FC = () => {
           ctx.globalCompositeOperation = 'destination-out';
       } else {
           ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Visual feedback: Semi-transparent red
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; 
       }
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
       if (!isDrawing || !maskCanvasRef.current) return;
       const canvas = maskCanvasRef.current;
       const ctx = canvas.getContext('2d');
@@ -180,8 +199,20 @@ const App: React.FC = () => {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
+      
+      let clientX, clientY;
+      if ('touches' in e) {
+          // Prevent scrolling while drawing on touch devices
+          // e.preventDefault(); // Note: might need passive: false in listeners if added manually, but React handles logic mostly.
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+      } else {
+          clientX = (e as React.MouseEvent).clientX;
+          clientY = (e as React.MouseEvent).clientY;
+      }
+
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
 
       ctx.lineTo(x, y);
       ctx.stroke();
@@ -240,12 +271,14 @@ const App: React.FC = () => {
               ratio: selectedRatio,
               itemsToLock: detectedItems,
               addedItems: addedItems,
-              productAssets: productAssets.map(p => ({...p, file: undefined})),
+              productAssets: productAssets.map(p => ({...p, file: undefined})), 
+              selectedMaterials: selectedMaterials,
               customPrompt: customPrompt,
               seed: undefined 
           },
           detectedItems,
           addedItems,
+          selectedMaterials,
           detailPoints,
           history
       };
@@ -258,6 +291,7 @@ const App: React.FC = () => {
               ...projectData,
               originalImageBase64: base64File
           };
+          
           const blob = new Blob([JSON.stringify(fullProjectData)], { type: "application/json" });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
@@ -275,13 +309,16 @@ const App: React.FC = () => {
           try {
               const text = e.target?.result as string;
               const data = JSON.parse(text);
+              
               if (data.originalImageBase64) {
                   const res = await fetch(data.originalImageBase64);
                   const blob = await res.blob();
                   const reconstructedFile = new File([blob], data.originalFileName + "_restored", { type: blob.type });
+                  
                   setFile(reconstructedFile);
                   setPreviewUrl(data.originalImageBase64);
                   setOriginalFileName(data.originalFileName);
+                  
                   if (data.config) {
                       setAppMode(data.config.mode || AppMode.RESTYLING);
                       setSelectedStyle(data.config.style || ArchitecturalStyle.WARM_BRUTALISM);
@@ -290,11 +327,14 @@ const App: React.FC = () => {
                       setCustomPrompt(data.config.customPrompt || '');
                       setActiveGenerationConfig(data.config);
                   }
+                  
                   setDetectedItems(data.detectedItems || []);
                   setAddedItems(data.addedItems || []);
+                  setSelectedMaterials(data.selectedMaterials || []);
                   setGeneratedImage(data.generatedImage || null);
                   setDetailPoints(data.detailPoints || []);
                   setHistory(data.history || []);
+                  
                   setError(null);
                   setVariationResults([]);
               }
@@ -307,102 +347,21 @@ const App: React.FC = () => {
   };
 
   // === DESIGN HANDLERS ===
-  const processFile = async (selectedFile: File) => {
-    if (selectedFile.name.endsWith('.gphm') || selectedFile.type === 'application/json') {
-        handleLoadProject(selectedFile);
-        return;
-    }
-    if (selectedFile.size > 20 * 1024 * 1024) {
-      setError("File troppo grande. Per favore carica un'immagine inferiore a 20MB.");
-      return;
-    }
-    setFile(selectedFile);
-    const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
-    setOriginalFileName(nameWithoutExt);
-    setGeneratedImage(null);
-    setActiveGenerationConfig(null); 
-    setError(null);
-    setDetectedItems([]);
-    setAddedItems([]);
-    setVariationResults([]);
-    setDetailPoints([]);
-    setHistory([]);
-    setHasMask(false);
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreviewUrl(objectUrl);
-    if (apiKeyReady) {
-      await analyzeImage(selectedFile);
-    }
-  };
-
-  const analyzeImage = async (imageFile: File) => {
-    setIsAnalyzing(true);
-    try {
-      const base64 = await fileToBase64(imageFile);
-      const { items, cost } = await detectFurniture(base64, imageFile.type);
-      setDetectedItems(items);
-      addToSessionCost(cost);
-    } catch (err) {
-      console.error(err);
-      setError("Impossibile analizzare l'immagine. Riprova.");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) await processFile(event.target.files[0]);
-  };
-  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
-  const handleDrop = async (e: React.DragEvent) => { e.preventDefault(); if (e.dataTransfer.files && e.dataTransfer.files[0]) await processFile(e.dataTransfer.files[0]); };
-
-  const clearImage = () => {
-    setFile(null);
-    setOriginalFileName('');
-    setPreviewUrl(null);
-    setGeneratedImage(null);
-    setActiveGenerationConfig(null);
-    setDetectedItems([]);
-    setAddedItems([]);
-    setProductAssets([]);
-    setVariationResults([]);
-    setDetailPoints([]);
-    setHistory([]);
-    setHasMask(false);
-    setError(null);
-    setProgress(0);
-    setAppMode(AppMode.RESTYLING);
-  };
-
+  const processFile = async (selectedFile: File) => { if (selectedFile.name.endsWith('.gphm') || selectedFile.type === 'application/json') { handleLoadProject(selectedFile); return; } if (selectedFile.size > 20 * 1024 * 1024) { setError("File troppo grande. Per favore carica un'immagine inferiore a 20MB."); return; } setFile(selectedFile); const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, ""); setOriginalFileName(nameWithoutExt); setGeneratedImage(null); setActiveGenerationConfig(null); setError(null); setDetectedItems([]); setAddedItems([]); setVariationResults([]); setDetailPoints([]); setHistory([]); setHasMask(false); setSelectedMaterials([]); const objectUrl = URL.createObjectURL(selectedFile); setPreviewUrl(objectUrl); if (apiKeyReady) { await analyzeImage(selectedFile); } };
+  const analyzeImage = async (imageFile: File) => { setIsAnalyzing(true); try { const base64 = await fileToBase64(imageFile); const { items, cost } = await detectFurniture(base64, imageFile.type); setDetectedItems(items); addToSessionCost(cost); } catch (err) { console.error(err); setError("Impossibile analizzare l'immagine. Riprova."); } finally { setIsAnalyzing(false); } };
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => { if (event.target.files && event.target.files[0]) { await processFile(event.target.files[0]); } };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
+  const handleDrop = async (e: React.DragEvent) => { e.preventDefault(); if (e.dataTransfer.files && e.dataTransfer.files[0]) { await processFile(e.dataTransfer.files[0]); } };
+  const clearImage = () => { setFile(null); setOriginalFileName(''); setPreviewUrl(null); setGeneratedImage(null); setActiveGenerationConfig(null); setDetectedItems([]); setAddedItems([]); setProductAssets([]); setVariationResults([]); setDetailPoints([]); setHistory([]); setHasMask(false); setSelectedMaterials([]); setError(null); setProgress(0); setAppMode(AppMode.RESTYLING); };
   const toggleItemSelection = (id: string) => { setDetectedItems(prev => prev.map(item => item.id === id ? { ...item, selected: !item.selected } : item)); };
   const updateItemNotes = (id: string, notes: string) => { setDetectedItems(prev => prev.map(item => item.id === id ? { ...item, notes } : item)); };
   const toggleAddedItem = (itemLabel: string) => { setAddedItems(prev => { const exists = prev.find(i => i.label === itemLabel); if (exists) { return prev.filter(i => i.label !== itemLabel); } else { return [...prev, { id: `add-${Date.now()}-${Math.random()}`, label: itemLabel, detail: '' }]; } }); };
   const updateAddedItemDetail = (label: string, detail: string) => { setAddedItems(prev => prev.map(item => item.label === label ? { ...item, detail } : item)); };
-
   const handleProductUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const previewUrl = URL.createObjectURL(file); const base64 = await fileToBase64(file); setProductAssets(prev => [ ...prev, { id: `prod-${Date.now()}`, file, previewUrl, base64, label: "Nuovo Prodotto" } ]); } };
   const removeProductAsset = (id: string) => { setProductAssets(prev => prev.filter(p => p.id !== id)); };
   const updateProductLabel = (id: string, label: string) => { setProductAssets(prev => prev.map(p => p.id === id ? { ...p, label } : p)); };
 
-  const startProgressSimulation = () => {
-    setProgress(0);
-    setLoadingStage('Analisi geometrica...');
-    if (progressInterval.current) clearInterval(progressInterval.current);
-    progressInterval.current = setInterval(() => {
-      setProgress((prev) => {
-        let increment = 0;
-        if (prev < 30) increment = 2; else if (prev < 60) increment = 0.5; else if (prev < 85) increment = 0.2; else if (prev < 95) increment = 0.05;
-        const newProgress = Math.min(prev + increment, 98);
-        let modeLabel = 'Applicazione stile...';
-        if (appMode === AppMode.EDITING) modeLabel = 'Modifica puntuale...';
-        if (appMode === AppMode.VIRTUAL_STAGING) modeLabel = 'Composizione prodotti...';
-        if (newProgress > 10 && newProgress < 30) setLoadingStage(modeLabel);
-        if (newProgress > 30 && newProgress < 50) setLoadingStage(appMode === AppMode.VIRTUAL_STAGING ? 'Armonizzazione luci...' : 'Integrazione elementi...');
-        if (newProgress > 50 && newProgress < 75) setLoadingStage('Rendering volumetrico...');
-        if (newProgress > 75) setLoadingStage('Finitura 4K...');
-        return newProgress;
-      });
-    }, 100);
-  };
+  const startProgressSimulation = () => { setProgress(0); setLoadingStage('Analisi geometrica...'); if (progressInterval.current) clearInterval(progressInterval.current); progressInterval.current = setInterval(() => { setProgress((prev) => { let increment = 0; if (prev < 30) increment = 2; else if (prev < 60) increment = 0.5; else if (prev < 85) increment = 0.2; else if (prev < 95) increment = 0.05; const newProgress = Math.min(prev + increment, 98); let modeLabel = 'Applicazione stile...'; if (appMode === AppMode.EDITING) modeLabel = 'Modifica puntuale...'; if (appMode === AppMode.VIRTUAL_STAGING) modeLabel = 'Composizione prodotti...'; if (newProgress > 10 && newProgress < 30) setLoadingStage(modeLabel); if (newProgress > 30 && newProgress < 50) setLoadingStage(appMode === AppMode.VIRTUAL_STAGING ? 'Armonizzazione luci...' : 'Integrazione elementi...'); if (newProgress > 50 && newProgress < 75) setLoadingStage('Rendering volumetrico...'); if (newProgress > 75) setLoadingStage('Finitura 4K...'); return newProgress; }); }, 100); };
 
   const handleGenerateDesign = async () => {
     if (!file || !apiKeyReady) return;
@@ -425,6 +384,7 @@ const App: React.FC = () => {
         itemsToLock: detectedItems,
         addedItems: addedItems,
         productAssets: productAssets,
+        selectedMaterials: selectedMaterials, // Pass materials
         customPrompt: customPrompt,
         maskBase64: maskBase64,
         seed: seed 
@@ -462,22 +422,13 @@ const App: React.FC = () => {
       setSelectedStyle(item.config.style);
       setSelectedShootingStyle(item.config.shootingStyle);
       setSelectedRatio(item.config.ratio);
+      setSelectedMaterials(item.config.selectedMaterials || []);
       setCustomPrompt(item.config.customPrompt || '');
   };
 
   const handleDownload = (url: string, ratio?: string) => { if (url) { const link = document.createElement('a'); link.href = url; const styleCode = STYLES.find(s => s.id === selectedStyle)?.code || '00'; const shotCode = MASTER_SHOOTING_STYLES.find(s => s.id === selectedShootingStyle)?.code || 'X'; const ratioSuffix = ratio ? `_${ratio.replace(':', '-')}` : ''; const finalName = `GP${originalFileName}${styleCode}${shotCode}${ratioSuffix}.png`; link.download = finalName; document.body.appendChild(link); link.click(); document.body.removeChild(link); } };
-
-  const handleDownloadPDF = async () => {
-      if (!previewUrl || !generatedImage || !activeGenerationConfig) return;
-      let originalBase64 = previewUrl;
-      if (previewUrl.startsWith('blob:')) {
-          const res = await fetch(previewUrl);
-          const blob = await res.blob();
-          originalBase64 = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
-      }
-      await generateMoodboardPDF(originalBase64, generatedImage, activeGenerationConfig, originalFileName);
-  };
-
+  const handleDownloadPDF = async () => { if (!previewUrl || !generatedImage || !activeGenerationConfig) return; let originalBase64 = previewUrl; if (previewUrl.startsWith('blob:')) { const res = await fetch(previewUrl); const blob = await res.blob(); originalBase64 = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.readAsDataURL(blob); }); } await generateMoodboardPDF(originalBase64, generatedImage, activeGenerationConfig, originalFileName); };
+  
   const openExportModal = () => { const currentRatio = activeGenerationConfig?.ratio || selectedRatio; const available = ASPECT_RATIOS.filter(r => r.id !== currentRatio).map(r => r.id); setSelectedExportRatios(available); setShowExportModal(true); };
   const toggleExportRatio = (ratio: AspectRatio) => { setSelectedExportRatios(prev => prev.includes(ratio) ? prev.filter(r => r !== ratio) : [...prev, ratio] ); };
   const generateVariations = async () => { if (!file || selectedExportRatios.length === 0 || !activeGenerationConfig) return; setIsProcessingVariations(true); const initialResults = selectedExportRatios.map(ratio => ({ ratio, url: '', loading: true })); setVariationResults(initialResults); try { const base64 = await fileToBase64(file); for (const ratio of selectedExportRatios) { try { const config: GenerationConfig = { ...activeGenerationConfig, ratio: ratio, }; const { image, cost } = await generateInteriorDesign(base64, config, file.type); addToSessionCost(cost); setVariationResults(prev => prev.map(item => item.ratio === ratio ? { ...item, url: image, loading: false } : item)); } catch (error) { console.error(`Failed to generate ratio ${ratio}`, error); setVariationResults(prev => prev.map(item => item.ratio === ratio ? { ...item, loading: false } : item)); } } } catch (err) { console.error("Batch process error", err); } finally { setIsProcessingVariations(false); } };
@@ -508,6 +459,30 @@ const App: React.FC = () => {
              <button onClick={() => setAppMode(AppMode.VIRTUAL_STAGING)} className={`w-full py-2 text-[10px] font-bold uppercase rounded-lg transition-all flex items-center justify-center gap-2 ${appMode === AppMode.VIRTUAL_STAGING ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Package className="w-3 h-3" /> Virtual Staging (Prodotti)</button>
         </div>
         <div className="animate-in fade-in slide-in-from-left-4 duration-300 space-y-8">
+            {/* MATERIAL UI SECTION */}
+            {appMode !== AppMode.EDITING && (
+                <div className="space-y-4">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1 flex items-center gap-2"><Droplet className="w-3.5 h-3.5" /> Materiali & Finiture</label>
+                    <div className="flex flex-wrap gap-2">
+                        {MATERIALS.map((mat) => {
+                            const isSelected = selectedMaterials.some(m => m.id === mat.id);
+                            return (
+                                <button 
+                                    key={mat.id} 
+                                    onClick={() => toggleMaterial(mat)}
+                                    className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all flex flex-col items-center ${isSelected ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200'}`}
+                                >
+                                    <span>{mat.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {selectedMaterials.length > 0 && (
+                        <div className="text-[10px] text-gray-400 px-1">Selezionati: {selectedMaterials.map(m => m.label).join(", ")}</div>
+                    )}
+                </div>
+            )}
+
             {appMode === AppMode.EDITING && (
                 <div className="bg-red-50 p-4 rounded-2xl border border-red-100 relative">
                     <h3 className="text-[#8B0000] font-bold text-sm mb-2 flex items-center gap-2"><Edit3 className="w-4 h-4"/> Modalità Modifica</h3>
@@ -563,14 +538,35 @@ const App: React.FC = () => {
       </aside>
 
       <main className="flex-1 relative flex flex-col h-full md:h-screen overflow-hidden bg-[#F5F5F7]">
+            {/* Top Bar */}
             <header className="h-16 bg-white/70 backdrop-blur-xl border-b border-gray-200/50 flex items-center justify-between px-8 z-20 sticky top-0">
-                <div className="flex items-center gap-3 text-xs font-semibold tracking-wide"> <div className="flex items-center gap-2 text-[#8B0000]"><span>GP HomeMorph</span><ArrowRight className="w-3 h-3 text-gray-300" /><span>{appMode === AppMode.EDITING ? 'Smart Edit' : appMode === AppMode.VIRTUAL_STAGING ? 'Virtual Staging' : 'Restyling'}</span></div> </div>
+                <div className="flex items-center gap-3 text-xs font-semibold tracking-wide">
+                    {/* Breadcrumbs */}
+                    <div className="flex items-center gap-2 text-[#8B0000]">
+                        <span>GP HomeMorph</span>
+                        <ArrowRight className="w-3 h-3 text-gray-300" />
+                        <span>{appMode === AppMode.EDITING ? 'Smart Edit' : appMode === AppMode.VIRTUAL_STAGING ? 'Virtual Staging' : 'Restyling'}</span>
+                    </div>
+                </div>
                 <div className="flex gap-2">
-                   {generatedImage && ( <> <button onClick={handleDownloadPDF} className="text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-full shadow-sm flex items-center gap-2"><FileText className="w-3.5 h-3.5 text-blue-600" /> PDF Moodboard</button> <button onClick={handleSaveProject} className="text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-full shadow-sm flex items-center gap-2"><Save className="w-3.5 h-3.5" /> Salva Progetto</button> <button onClick={() => setShowDetailMode(true)} className="text-xs font-bold text-white bg-black hover:bg-gray-800 px-4 py-2 rounded-full shadow-md flex items-center gap-2"><ZoomIn className="w-3 h-3" /> MODE FOTOGRAFO</button> </> )}
+                   {generatedImage && (
+                       <>
+                       <button onClick={handleDownloadPDF} className="text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
+                           <FileText className="w-3.5 h-3.5 text-blue-600" /> PDF Moodboard
+                       </button>
+                       <button onClick={handleSaveProject} className="text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
+                           <Save className="w-3.5 h-3.5" /> Salva Progetto
+                       </button>
+                       <button onClick={() => setShowDetailMode(true)} className="text-xs font-bold text-white bg-black hover:bg-gray-800 px-4 py-2 rounded-full shadow-md flex items-center gap-2">
+                           <ZoomIn className="w-3 h-3" /> MODE FOTOGRAFO
+                       </button>
+                       </>
+                   )}
                    <button onClick={clearImage} className="text-xs font-semibold text-gray-500 hover:text-red-500 transition-colors px-4 py-2 rounded-lg">Reset</button>
                 </div>
             </header>
 
+            {/* Workspace */}
             <div className="flex-1 p-6 md:p-8 overflow-y-auto flex items-center justify-center custom-scrollbar">
                 {!file ? (
                     <div className="w-full max-w-xl h-[400px] border border-dashed border-gray-300 rounded-[2rem] flex flex-col items-center justify-center bg-white hover:bg-gray-50 hover:border-[#8B0000] cursor-pointer group shadow-sm transition-all" onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -584,8 +580,11 @@ const App: React.FC = () => {
                         {error && <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl flex items-center gap-3"><AlertCircle className="w-5 h-5" /><span className="text-sm font-medium">{error}</span></div>}
 
                         <div className="flex flex-col gap-12 w-full">
+                            {/* Original */}
                             <div className="w-full flex flex-col gap-3 relative">
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-2">{appMode === AppMode.VIRTUAL_STAGING ? 'Stanza Vuota / Ambiente' : 'Originale'}</span>
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-2">
+                                    {appMode === AppMode.VIRTUAL_STAGING ? 'Stanza Vuota / Ambiente' : 'Originale'}
+                                </span>
                                 <div className="relative w-full h-[50vh] bg-white rounded-[2rem] overflow-hidden shadow-lg border border-gray-100 group">
                                     {previewUrl && <img src={previewUrl} alt="Original" className="w-full h-full object-contain p-2 select-none" draggable={false} />}
                                     
@@ -597,6 +596,11 @@ const App: React.FC = () => {
                                             onMouseMove={draw}
                                             onMouseUp={stopDrawing}
                                             onMouseLeave={stopDrawing}
+                                            // TOUCH EVENTS SUPPORT FOR MOBILE
+                                            onTouchStart={startDrawing}
+                                            onTouchMove={draw}
+                                            onTouchEnd={stopDrawing}
+                                            onTouchCancel={stopDrawing}
                                             className="absolute inset-0 w-full h-full cursor-crosshair z-20"
                                             style={{ touchAction: 'none' }}
                                         />
@@ -618,6 +622,7 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Generated */}
                             <div className="w-full flex flex-col gap-3">
                                 <div className="flex justify-between items-center px-2">
                                     <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Risultato</span>
@@ -634,9 +639,12 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Generate Button */}
                         <div className="hidden md:flex justify-center pb-4">
                             <button onClick={handleGenerateDesign} disabled={!file || isGenerating || isAnalyzing} className={`px-12 py-4 rounded-full font-bold text-base shadow-xl transition-all flex items-center gap-3 ${!file || isGenerating || isAnalyzing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-[#8B0000] text-white hover:bg-[#660000]'}`}>
-                                {isGenerating ? 'Elaborazione...' : <><Sparkles className="w-5 h-5" /> {appMode === AppMode.EDITING ? 'Applica Modifiche' : appMode === AppMode.VIRTUAL_STAGING ? 'Componi Stanza' : 'Genera Design'}</>}
+                                {isGenerating ? 'Elaborazione...' : <><Sparkles className="w-5 h-5" /> 
+                                {appMode === AppMode.EDITING ? 'Applica Modifiche' : appMode === AppMode.VIRTUAL_STAGING ? 'Componi Stanza' : 'Genera Design'}
+                                </>}
                             </button>
                         </div>
                     </div>
@@ -644,54 +652,277 @@ const App: React.FC = () => {
             </div>
       </main>
 
+      {/* EXPORT MODAL */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95">
-            <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center"><h2 className="text-2xl font-bold">Esporta Formati</h2><button onClick={() => setShowExportModal(false)}><X className="w-6 h-6 text-gray-400" /></button></div>
+            <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Esporta Formati</h2>
+              <button onClick={() => setShowExportModal(false)}><X className="w-6 h-6 text-gray-400" /></button>
+            </div>
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
               <div className="mb-8">
                 <div className="flex flex-wrap gap-3">
-                  {ASPECT_RATIOS.filter(r => r.id !== activeGenerationConfig?.ratio).map((ratio) => { const isDone = variationResults.some(r => r.ratio === ratio.id && r.url); return <button key={ratio.id} onClick={() => !isProcessingVariations && !isDone && toggleExportRatio(ratio.id)} disabled={isProcessingVariations || isDone} className={`px-5 py-3 rounded-xl font-bold text-sm border-2 ${selectedExportRatios.includes(ratio.id) ? 'border-[#8B0000] bg-red-50 text-[#8B0000]' : 'border-gray-100 bg-white'} ${isDone ? 'bg-green-50 border-green-200 text-green-700' : ''}`}>{isDone && <Check className="w-4 h-4 mr-2 inline" />}{ratio.label}</button>; })}
+                  {ASPECT_RATIOS.filter(r => r.id !== activeGenerationConfig?.ratio).map((ratio) => {
+                    const isDone = variationResults.some(r => r.ratio === ratio.id && r.url);
+                    return <button key={ratio.id} onClick={() => !isProcessingVariations && !isDone && toggleExportRatio(ratio.id)} disabled={isProcessingVariations || isDone} className={`px-5 py-3 rounded-xl font-bold text-sm border-2 ${selectedExportRatios.includes(ratio.id) ? 'border-[#8B0000] bg-red-50 text-[#8B0000]' : 'border-gray-100 bg-white'} ${isDone ? 'bg-green-50 border-green-200 text-green-700' : ''}`}>{isDone && <Check className="w-4 h-4 mr-2 inline" />}{ratio.label}</button>;
+                  })}
                 </div>
               </div>
-              {!isProcessingVariations && selectedExportRatios.length > 0 && variationResults.every(r => r.url) === false && (<button onClick={generateVariations} className="bg-black text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-lg mb-8">Avvia Batch</button>)}
+              {!isProcessingVariations && selectedExportRatios.length > 0 && variationResults.every(r => r.url) === false && (
+                <button onClick={generateVariations} className="bg-black text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-lg mb-8">Avvia Batch</button>
+              )}
               {isProcessingVariations && <div className="mb-8 p-4 bg-red-50 rounded-xl text-[#8B0000] flex items-center gap-2"><Loader2 className="animate-spin w-5 h-5"/> Generazione in corso...</div>}
-              {variationResults.length > 0 && (<div className="grid grid-cols-3 gap-4">{variationResults.map((res) => ( <div key={res.ratio} className="relative aspect-square bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 group">{res.loading ? <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-300" /></div> : res.url && (<><img src={res.url} className="w-full h-full object-cover" /><button onClick={() => handleDownload(res.url, res.ratio)} className="absolute bottom-2 right-2 bg-white p-2 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity"><Download className="w-4 h-4" /></button></>)}</div> ))}</div>)}
+              {variationResults.length > 0 && (
+                  <div className="grid grid-cols-3 gap-4">
+                    {variationResults.map((res) => (
+                       <div key={res.ratio} className="relative aspect-square bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 group">
+                           {res.loading ? <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-300" /></div> : res.url && (
+                               <>
+                               <img src={res.url} className="w-full h-full object-cover" />
+                               <button onClick={() => handleDownload(res.url, res.ratio)} className="absolute bottom-2 right-2 bg-white p-2 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity"><Download className="w-4 h-4" /></button>
+                               </>
+                           )}
+                       </div>
+                    ))}
+                  </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
+      {/* DETAIL PHOTOGRAPHER OVERLAY */}
       {showDetailMode && generatedImage && (
           <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col md:flex-row select-none">
-              <div className="flex-1 relative flex items-center justify-center p-8 bg-black overflow-hidden cursor-crosshair" ref={containerRef} onMouseMove={handleMouseMove} onWheel={handleWheel} onClick={handleClick}>
+              {/* Main Canvas */}
+              <div 
+                  className="flex-1 relative flex items-center justify-center p-8 bg-black overflow-hidden cursor-crosshair" 
+                  ref={containerRef}
+                  onMouseMove={handleMouseMove}
+                  onWheel={handleWheel}
+                  onClick={handleClick}
+              >
                   <div className="relative inline-block shadow-2xl rounded-sm ring-1 ring-gray-700">
-                      <img ref={imageRef} src={generatedImage} alt="Master Shot" className="max-h-[85vh] object-contain pointer-events-none" />
-                      {!tempDetailPoint && cropRect && (<div className="absolute border-2 border-white shadow-[0_0_20px_rgba(0,0,0,0.5)] z-20 pointer-events-none" style={{ left: cropRect.x, top: cropRect.y, width: cropRect.width, height: cropRect.height, }}><div className="absolute w-full h-px bg-white/30 top-1/3 left-0"></div><div className="absolute w-full h-px bg-white/30 top-2/3 left-0"></div><div className="absolute h-full w-px bg-white/30 left-1/3 top-0"></div><div className="absolute h-full w-px bg-white/30 left-2/3 top-0"></div></div>)}
-                      {detailPoints.map(p => (<div key={p.id} className="absolute bg-white/10 border border-white/40 pointer-events-none" style={{ left: `${p.cropRect.x}%`, top: `${p.cropRect.y}%`, width: `${p.cropRect.width}%`, height: `${p.cropRect.height}%` }}>{p.loading ? <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 text-[#8B0000] animate-spin mb-2" /></div> : <div className="absolute -top-3 -right-3 w-6 h-6 bg-[#8B0000] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md">✓</div>}</div>))}
-                      {tempDetailPoint && (
-                          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-[#1A1A1A] border border-gray-700 p-6 rounded-2xl shadow-2xl z-[100] w-96 animate-in fade-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-                              <h4 className="text-white text-xs font-bold uppercase mb-4 flex items-center gap-2 border-b border-white/10 pb-2"><Camera className="w-4 h-4 text-[#8B0000]" /> Configura Scatto</h4>
-                              <div className="space-y-4">
-                                  <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-gray-500">Soggetto</label><input autoFocus type="text" className="w-full bg-[#0A0A0A] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-[#8B0000] outline-none placeholder-gray-600" placeholder="Es. Tessuto cuscino..." value={detailDescription} onChange={(e) => setDetailDescription(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && confirmDetailShot()} /></div>
-                                  <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-gray-500">Angolazione Camera</label><div className="grid grid-cols-2 gap-2">{[{ id: DetailShotAngle.THREE_QUARTER, label: '3/4 Dinamico' }, { id: DetailShotAngle.MACRO_STRAIGHT, label: 'Frontale' }, { id: DetailShotAngle.TOP_DOWN, label: 'Dall\'Alto' }, { id: DetailShotAngle.LOW_ANGLE, label: 'Dal Basso' },].map((angle) => ( <button key={angle.id} onClick={() => setSelectedDetailAngle(angle.id as DetailShotAngle)} className={`text-[10px] py-2 rounded-lg font-bold transition-all border ${selectedDetailAngle === angle.id ? 'bg-[#8B0000] border-[#8B0000] text-white' : 'bg-[#0A0A0A] border-gray-700 text-gray-400 hover:border-gray-50'}`}>{angle.label}</button>))}</div></div>
-                                  <div className="space-y-1 pt-2 border-t border-white/10"><label className="text-[10px] uppercase font-bold text-gray-500 flex justify-between"><span>Reference Tessuto (Opzionale)</span>{tempTextureFile && <button onClick={removeTexture} className="text-red-500 hover:text-red-400">Rimuovi</button>}</label>{!tempTextureFile ? (<div className="relative group"><div className="w-full h-16 border border-dashed border-gray-600 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:border-[#8B0000] hover:text-[#8B0000] transition-colors cursor-pointer bg-[#0A0A0A]"><Upload className="w-4 h-4 mb-1" /><span className="text-[10px]">Carica macro tessuto</span></div><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleTextureUpload} /></div>) : (<div className="flex gap-2"><div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-600 bg-gray-800"><img src={tempTexturePreview || ''} className="w-full h-full object-cover" /></div><div className="flex-1 space-y-2 pt-1"><div className="flex justify-between items-center text-[9px] text-gray-400 uppercase font-bold"><span>Densità Trama</span><span className="text-[#8B0000]">x{tempTextureTiling}</span></div><input type="range" min="1" max="10" step="1" value={tempTextureTiling} onChange={(e) => setTempTextureTiling(parseInt(e.target.value))} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#8B0000]" /><div className="flex justify-between text-[8px] text-gray-500 font-medium"><span>Macro (1:1)</span><span>Micro (Fitta)</span></div></div></div>)}</div>
-                              </div>
-                              <div className="flex justify-end gap-2 mt-6"><button onClick={cancelDetailShot} className="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white">Annulla</button><button onClick={confirmDetailShot} className="px-4 py-2 rounded-lg text-xs font-bold bg-white text-black hover:bg-gray-200 flex items-center gap-2 shadow-lg">SCATTA FOTO <Camera className="w-3 h-3"/></button></div>
+                      <img 
+                          ref={imageRef}
+                          src={generatedImage} 
+                          alt="Master Shot" 
+                          className="max-h-[85vh] object-contain pointer-events-none" 
+                      />
+                      
+                      {/* Live Viewfinder (Only when not inputting) */}
+                      {!tempDetailPoint && cropRect && (
+                          <div 
+                            className="absolute border-2 border-white shadow-[0_0_20px_rgba(0,0,0,0.5)] z-20 pointer-events-none"
+                            style={{ 
+                                left: cropRect.x, 
+                                top: cropRect.y, 
+                                width: cropRect.width, 
+                                height: cropRect.height,
+                            }}
+                          >
+                             {/* Rule of Thirds Grid */}
+                             <div className="absolute w-full h-px bg-white/30 top-1/3 left-0"></div>
+                             <div className="absolute w-full h-px bg-white/30 top-2/3 left-0"></div>
+                             <div className="absolute h-full w-px bg-white/30 left-1/3 top-0"></div>
+                             <div className="absolute h-full w-px bg-white/30 left-2/3 top-0"></div>
+                             
+                             {/* Corners */}
+                             <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-white"></div>
+                             <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-white"></div>
+                             <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-white"></div>
+                             <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-white"></div>
                           </div>
                       )}
-                      <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg backdrop-blur-md text-sm font-medium border border-white/10 pointer-events-none z-30 flex items-center gap-3"><MousePointer2 className="w-4 h-4" /><span>Seleziona Soggetto</span><span className="w-px h-4 bg-white/20"></span><div className="flex items-center gap-1"><span className="text-gray-400 text-xs">SCROLL</span> <span className="text-xs">Zoom</span></div></div>
+
+                      {/* Markers for existing shots */}
+                      {detailPoints.map(p => (
+                          <div 
+                            key={p.id}
+                            className="absolute bg-white/10 border border-white/40 pointer-events-none"
+                            style={{ 
+                                left: `${p.cropRect.x}%`, 
+                                top: `${p.cropRect.y}%`, 
+                                width: `${p.cropRect.width}%`,
+                                height: `${p.cropRect.height}%` 
+                            }}
+                          >
+                              {p.loading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 text-[#8B0000] animate-spin" /></div>}
+                              {!p.loading && <div className="absolute -top-3 -right-3 w-6 h-6 bg-[#8B0000] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md">✓</div>}
+                          </div>
+                      ))}
+
+                      {/* INPUT POPUP FOR DETAIL CONTEXT */}
+                      {tempDetailPoint && (
+                          <div 
+                              className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-[#1A1A1A] border border-gray-700 p-6 rounded-2xl shadow-2xl z-[100] w-96 animate-in fade-in zoom-in-95"
+                              onClick={(e) => e.stopPropagation()} 
+                          >
+                              <h4 className="text-white text-xs font-bold uppercase mb-4 flex items-center gap-2 border-b border-white/10 pb-2">
+                                  <Camera className="w-4 h-4 text-[#8B0000]" /> Configura Scatto
+                              </h4>
+                              
+                              <div className="space-y-4">
+                                  {/* Subject Description */}
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] uppercase font-bold text-gray-500">Soggetto</label>
+                                      <input 
+                                          autoFocus
+                                          type="text"
+                                          className="w-full bg-[#0A0A0A] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-[#8B0000] outline-none placeholder-gray-600"
+                                          placeholder="Es. Tessuto cuscino, Venature legno..."
+                                          value={detailDescription}
+                                          onChange={(e) => setDetailDescription(e.target.value)}
+                                          onKeyDown={(e) => e.key === 'Enter' && confirmDetailShot()}
+                                      />
+                                  </div>
+
+                                  {/* Camera Angle Selector */}
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] uppercase font-bold text-gray-500">Angolazione Camera</label>
+                                      <div className="grid grid-cols-2 gap-2">
+                                          {[
+                                              { id: DetailShotAngle.THREE_QUARTER, label: '3/4 Dinamico' },
+                                              { id: DetailShotAngle.MACRO_STRAIGHT, label: 'Frontale' },
+                                              { id: DetailShotAngle.TOP_DOWN, label: 'Dall\'Alto' },
+                                              { id: DetailShotAngle.LOW_ANGLE, label: 'Dal Basso' },
+                                          ].map((angle) => (
+                                              <button 
+                                                  key={angle.id}
+                                                  onClick={() => setSelectedDetailAngle(angle.id as DetailShotAngle)}
+                                                  className={`text-[10px] py-2 rounded-lg font-bold transition-all border ${selectedDetailAngle === angle.id ? 'bg-[#8B0000] border-[#8B0000] text-white' : 'bg-[#0A0A0A] border-gray-700 text-gray-400 hover:border-gray-50'}`}
+                                              >
+                                                  {angle.label}
+                                              </button>
+                                          ))}
+                                      </div>
+                                  </div>
+
+                                  {/* TEXTURE UPLOAD */}
+                                  <div className="space-y-1 pt-2 border-t border-white/10">
+                                       <label className="text-[10px] uppercase font-bold text-gray-500 flex justify-between">
+                                           <span>Reference Tessuto (Opzionale)</span>
+                                           {tempTextureFile && <button onClick={removeTexture} className="text-red-500 hover:text-red-400">Rimuovi</button>}
+                                       </label>
+                                       
+                                       {!tempTextureFile ? (
+                                           <div className="relative group">
+                                               <div className="w-full h-16 border border-dashed border-gray-600 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:border-[#8B0000] hover:text-[#8B0000] transition-colors cursor-pointer bg-[#0A0A0A]">
+                                                   <Upload className="w-4 h-4 mb-1" />
+                                                   <span className="text-[10px]">Carica macro tessuto</span>
+                                               </div>
+                                               <input 
+                                                   type="file" 
+                                                   accept="image/*" 
+                                                   className="absolute inset-0 opacity-0 cursor-pointer"
+                                                   onChange={handleTextureUpload}
+                                                />
+                                           </div>
+                                       ) : (
+                                           <div className="flex gap-2">
+                                               <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-600 bg-gray-800">
+                                                   <img src={tempTexturePreview || ''} className="w-full h-full object-cover" />
+                                               </div>
+                                               <div className="flex-1 space-y-2 pt-1">
+                                                   {/* TILING SLIDER */}
+                                                   <div className="flex justify-between items-center text-[9px] text-gray-400 uppercase font-bold">
+                                                       <span>Densità Trama</span>
+                                                       <span className="text-[#8B0000]">x{tempTextureTiling}</span>
+                                                   </div>
+                                                   <input 
+                                                      type="range" 
+                                                      min="1" 
+                                                      max="10" 
+                                                      step="1"
+                                                      value={tempTextureTiling}
+                                                      onChange={(e) => setTempTextureTiling(parseInt(e.target.value))}
+                                                      className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#8B0000]"
+                                                   />
+                                                   <div className="flex justify-between text-[8px] text-gray-500 font-medium">
+                                                       <span>Macro (1:1)</span>
+                                                       <span>Micro (Fitta)</span>
+                                                   </div>
+                                               </div>
+                                           </div>
+                                       )}
+                                  </div>
+                              </div>
+
+                              <div className="flex justify-end gap-2 mt-6">
+                                  <button onClick={cancelDetailShot} className="px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white">Annulla</button>
+                                  <button onClick={confirmDetailShot} className="px-4 py-2 rounded-lg text-xs font-bold bg-white text-black hover:bg-gray-200 flex items-center gap-2 shadow-lg">
+                                      SCATTA FOTO <Camera className="w-3 h-3"/>
+                                  </button>
+                              </div>
+                              {/* Triangle Arrow */}
+                              <div className="absolute -top-2 left-1/2 -ml-2 w-4 h-4 bg-[#1A1A1A] border-t border-l border-gray-700 transform rotate-45"></div>
+                          </div>
+                      )}
+
+
+                      <div className="absolute top-4 left-4 bg-black/60 text-white px-4 py-2 rounded-lg backdrop-blur-md text-sm font-medium border border-white/10 pointer-events-none z-30 flex items-center gap-3">
+                          <MousePointer2 className="w-4 h-4" />
+                          <span>Seleziona Soggetto</span>
+                          <span className="w-px h-4 bg-white/20"></span>
+                          <div className="flex items-center gap-1"><span className="text-gray-400 text-xs">SCROLL</span> <span className="text-xs">Zoom</span></div>
+                      </div>
                   </div>
               </div>
               <div className="w-full md:w-[320px] bg-[#0A0A0A] border-l border-white/10 flex flex-col z-50">
-                  <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="text-white font-bold flex items-center gap-2"><Camera className="w-5 h-5 text-[#8B0000]" /> Rullino Dettagli</h3><button onClick={() => setShowDetailMode(false)} className="text-gray-400 hover:text-white"><X className="w-6 h-6" /></button></div>
+                  <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                      <h3 className="text-white font-bold flex items-center gap-2"><Camera className="w-5 h-5 text-[#8B0000]" /> Rullino Dettagli</h3>
+                      <button onClick={() => setShowDetailMode(false)} className="text-gray-400 hover:text-white"><X className="w-6 h-6" /></button>
+                  </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                      {detailPoints.length === 0 && (<div className="text-center text-gray-500 py-10 px-4"><p className="text-sm">Nessun dettaglio scattato.</p><p className="text-xs mt-2 text-gray-600">Usa il mirino per scattare foto artistiche.</p></div>)}
-                      {detailPoints.slice().reverse().map((point) => ( <div key={point.id} className="bg-[#1A1A1A] rounded-xl overflow-hidden border border-white/5 group"><div className="aspect-[4/3] relative">{point.loading ? (<div className="absolute inset-0 flex flex-col items-center justify-center"><Loader2 className="w-6 h-6 text-[#8B0000] animate-spin mb-2" /></div>) : point.url ? (<><img src={point.url} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"><button onClick={() => point.url && handleDownload(point.url, `detail_${point.id}`)} className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">SCARICA</button></div></>) : (<div className="absolute inset-0 flex items-center justify-center text-red-500 text-xs">Errore</div>)}</div><div className="p-3 bg-[#111] flex flex-col gap-1"><div className="flex justify-between items-center"><span className="text-[9px] font-bold text-[#8B0000] bg-red-900/20 px-1.5 py-0.5 rounded">{point.shotAngle}</span>{point.textureReference && (<div className="flex items-center gap-1 text-[9px] text-gray-400"><Grid3X3 className="w-3 h-3"/> <span>x{point.textureTiling || 1}</span></div>)}</div>{point.description && (<p className="text-[11px] text-white font-medium truncate">"{point.description}"</p>)}</div></div> ))}
+                      {detailPoints.length === 0 && (
+                          <div className="text-center text-gray-500 py-10 px-4">
+                              <p className="text-sm">Nessun dettaglio scattato.</p>
+                              <p className="text-xs mt-2 text-gray-600">Usa il mirino per inquadrare un soggetto e scattare nuove foto artistiche.</p>
+                          </div>
+                      )}
+                      {detailPoints.slice().reverse().map((point) => (
+                          <div key={point.id} className="bg-[#1A1A1A] rounded-xl overflow-hidden border border-white/5 group">
+                              <div className="aspect-[4/3] relative">
+                                  {point.loading ? (
+                                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                          <Loader2 className="w-6 h-6 text-[#8B0000] animate-spin mb-2" />
+                                          <span className="text-[10px] uppercase font-bold text-gray-500">Sviluppo in corso...</span>
+                                      </div>
+                                  ) : point.url ? (
+                                      <>
+                                      <img src={point.url} className="w-full h-full object-cover" />
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                          <button onClick={() => point.url && handleDownload(point.url, `detail_${point.id}`)} className="bg-white text-black px-4 py-2 rounded-full text-xs font-bold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
+                                              SCARICA
+                                          </button>
+                                      </div>
+                                      </>
+                                  ) : (
+                                      <div className="absolute inset-0 flex items-center justify-center text-red-500 text-xs">Errore</div>
+                                  )}
+                              </div>
+                              <div className="p-3 bg-[#111] flex flex-col gap-1">
+                                  <div className="flex justify-between items-center">
+                                      <span className="text-[9px] font-bold text-[#8B0000] bg-red-900/20 px-1.5 py-0.5 rounded">{point.shotAngle}</span>
+                                      {point.textureReference && (
+                                          <div className="flex items-center gap-1 text-[9px] text-gray-400">
+                                              <Grid3X3 className="w-3 h-3"/> 
+                                              <span>x{point.textureTiling || 1}</span>
+                                          </div>
+                                      )}
+                                  </div>
+                                  {point.description && (
+                                      <p className="text-[11px] text-white font-medium truncate">"{point.description}"</p>
+                                  )}
+                              </div>
+                          </div>
+                      ))}
                   </div>
               </div>
           </div>
       )}
+
     </div>
   );
 };

@@ -88,6 +88,14 @@ export interface ProductAsset {
   base64?: string;
 }
 
+// NEW: Material Interface
+export interface MaterialOption {
+  id: string;
+  label: string;
+  category: 'Fabric' | 'Wood' | 'Stone' | 'Metal' | 'Paint';
+  prompt: string; // Technical description
+}
+
 export interface GenerationConfig {
   mode: AppMode;
   style: ArchitecturalStyle;
@@ -96,8 +104,9 @@ export interface GenerationConfig {
   itemsToLock: DetectedItem[];
   addedItems: AddedItem[]; 
   productAssets?: ProductAsset[]; 
+  selectedMaterials?: MaterialOption[]; // NEW: List of selected materials
   customPrompt?: string; 
-  maskBase64?: string; // New for Magic Masking
+  maskBase64?: string; 
   seed?: number;
 }
 
