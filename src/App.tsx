@@ -249,7 +249,10 @@ const App: React.FC = () => {
       const ctx = tempCanvas.getContext('2d');
       
       if (ctx) {
-          // 1. Draw the user's strokes (Transparent background, Colored strokes)
+          // 1. Draw the user's strokes repeatedly to ensure opacity
+          // Drawing partially transparent strokes on top of each other increases opacity
+          ctx.drawImage(maskCanvasRef.current, 0, 0);
+          ctx.drawImage(maskCanvasRef.current, 0, 0);
           ctx.drawImage(maskCanvasRef.current, 0, 0);
           
           // 2. Change Source (strokes) to White

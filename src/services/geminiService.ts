@@ -208,24 +208,34 @@ export const generateInteriorDesign = async (
       ? `\n=== STRICT MATERIAL PALETTE ===\nUse ONLY these materials for relevant objects:\n${config.selectedMaterials.map(m => `- ${m.prompt}`).join("\n")}\n`
       : "";
 
-  // 1. EDIT MODE PROMPT
+  // 1. EDIT MODE PROMPT (STRICT MASKING)
   if (config.mode === AppMode.EDITING) {
      let prompt = `
-     You are an expert interior design editor. 
-     TASK: Modify ONLY specific elements based on request: "${config.customPrompt}". 
-     PRESERVE everything else pixel-perfect.
+     ROLE: Expert Photo Retoucher & Interior Editor.
+     
+     INPUTS:
+     1. IMAGE: The original room photo (Context).
+     2. MASK: A black and white binary map.
+        - WHITE PIXELS = EDIT ZONE (The area you MUST modify).
+        - BLACK PIXELS = PROTECTED ZONE (The area you MUST KEEP EXACTLY AS IS).
+     
+     USER TASK: "${config.customPrompt}"
+     
+     STRICT RULES:
+     1. APPLY the user task ONLY to the WHITE area of the provided mask.
+     2. THE BLACK AREA MUST REMAIN BIT-FOR-BIT IDENTICAL TO THE ORIGINAL IMAGE. DO NOT CHANGE IT.
+     3. Do not "reimagine" the room. Only edit the selection.
+     4. Blend the boundaries naturally so it looks like a real photo.
      ${materialPrompts}
      `;
      
      const parts: any[] = [
          { text: prompt },
-         { inlineData: { data: imageBase64, mimeType: mimeType } }
+         { inlineData: { data: imageBase64, mimeType: mimeType } } // Image 1
      ];
      
      if (config.maskBase64) {
-         prompt += " \n\nIMPORTANT: A binary MASK image is provided. \n- WHITE pixels represent the area you MUST EDIT.\n- BLACK pixels represent the area you MUST PRESERVE EXACTLY.\n- Do NOT modify the black area under any circumstances.";
-         parts[0] = { text: prompt };
-         parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } });
+         parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } }); // Image 2
      }
      
      return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
@@ -242,7 +252,7 @@ export const generateInteriorDesign = async (
       return executeGenerationMultiModalWithFallback(ai, parts, config);
   }
 
-  // 3. RESTYLING PROMPT (STRENGTHENED AGAINST HALLUCINATION)
+  // 3. RESTYLING PROMPT
   const styleObj = STYLES.find(s => s.id === config.style);
   const styleDescription = styleObj ? styleObj.description : config.style;
   const styleName = styleObj ? styleObj.label : config.style;
@@ -355,6 +365,5 @@ export const generateDetailShot = async (
       parts[0] = { text: prompt };
   }
 
-  // Reuse the fallback logic for details too
   return executeGenerationMultiModalWithFallback(ai, parts, { mode: AppMode.RESTYLING } as any);
 };
