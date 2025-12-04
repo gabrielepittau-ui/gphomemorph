@@ -82,7 +82,7 @@ export interface AddedItem {
 
 export interface ProductAsset {
   id: string;
-  file: File;
+  file?: File;
   previewUrl: string;
   label: string; // e.g., "Bed", "Nightstand"
   base64?: string;
@@ -95,8 +95,9 @@ export interface GenerationConfig {
   ratio: AspectRatio;
   itemsToLock: DetectedItem[];
   addedItems: AddedItem[]; 
-  productAssets?: ProductAsset[]; // New for Virtual Staging
+  productAssets?: ProductAsset[]; 
   customPrompt?: string; 
+  maskBase64?: string; // New for Magic Masking
   seed?: number;
 }
 
@@ -107,20 +108,26 @@ export interface GeneratedImage {
 
 export interface DetailPoint {
   id: string;
-  // We use a rect to define the "Subject Selection"
   cropRect: {
     x: number; // Percent
     y: number; // Percent
     width: number; // Percent
     height: number; // Percent
   };
-  shotAngle: DetailShotAngle; // How the photographer should look at it
-  description?: string; // Specific description of what to capture
-  
-  // NEW: Texture Reference for high fidelity
+  shotAngle: DetailShotAngle; 
+  description?: string; 
   textureReference?: string; // Base64
   textureTiling?: number; // 1 to 10 scale factor
-
   url?: string;
   loading: boolean;
+}
+
+export interface HistoryItem {
+  id: string;
+  timestamp: number;
+  previewUrl: string; // Original image
+  generatedImage: string; // Result
+  config: GenerationConfig;
+  detectedItems: DetectedItem[];
+  addedItems: AddedItem[];
 }
