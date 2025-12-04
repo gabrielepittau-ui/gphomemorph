@@ -62,8 +62,9 @@ const cropBase64Image = async (base64: string, xPercent: number, yPercent: numbe
         if (x + w > img.width) w = img.width - x;
         if (y + h > img.height) h = img.height - y;
 
-        canvas.width = 1024; 
-        canvas.height = (h / w) * 1024;
+        // Set higher resolution for crop to help AI see details
+        canvas.width = 1536; 
+        canvas.height = (h / w) * 1536;
         
         const ctx = canvas.getContext('2d');
         if (!ctx) {
@@ -124,6 +125,76 @@ const tileBase64Image = async (base64: string, tileCount: number): Promise<strin
     });
 };
 
+// === CLIENT SIDE INPAINTING COMPOSITOR ===
+// This function strictly enforces the mask by overlaying the original image 
+// onto the generated image wherever the mask is black.
+const blendGeneratedWithOriginal = async (originalB64: string, generatedB64: string, maskB64: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const original = new Image();
+    const generated = new Image();
+    const mask = new Image();
+    
+    let loaded = 0;
+    const onLoaded = () => {
+      loaded++;
+      if (loaded === 3) {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = original.width;
+            canvas.height = original.height;
+            const ctx = canvas.getContext('2d');
+            
+            if (!ctx) { 
+                resolve(generatedB64);
+                return; 
+            }
+
+            // 1. Draw Original Image (Base)
+            ctx.drawImage(original, 0, 0);
+
+            // 2. Prepare the Generated Image masked
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = original.width;
+            tempCanvas.height = original.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            if (!tempCtx) {
+                resolve(generatedB64);
+                return;
+            }
+
+            // Draw generated image
+            tempCtx.drawImage(generated, 0, 0, original.width, original.height);
+
+            // Apply Mask (Keep generated only where mask is white)
+            tempCtx.globalCompositeOperation = 'destination-in';
+            tempCtx.drawImage(mask, 0, 0, original.width, original.height);
+
+            // 3. Composite Generated onto Original
+            ctx.drawImage(tempCanvas, 0, 0);
+
+            resolve(canvas.toDataURL('image/jpeg', 0.95).split(',')[1]);
+        } catch (e) {
+            console.error("Blending failed", e);
+            resolve(generatedB64);
+        }
+      }
+    };
+
+    original.onerror = () => resolve(generatedB64);
+    generated.onerror = () => resolve(generatedB64);
+    mask.onerror = () => resolve(generatedB64);
+
+    original.onload = onLoaded;
+    generated.onload = onLoaded;
+    mask.onload = onLoaded;
+
+    original.src = `data:image/jpeg;base64,${originalB64}`;
+    generated.src = `data:image/jpeg;base64,${generatedB64}`;
+    mask.src = `data:image/png;base64,${maskB64}`;
+  });
+};
+
 async function retryOperation<T>(operation: () => Promise<T>, maxRetries: number = 3): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
@@ -150,10 +221,7 @@ export const detectFurniture = async (
   mimeType: string
 ): Promise<{ items: DetectedItem[], cost: number }> => {
   const apiKey = getApiKey();
-  if (!apiKey) {
-      console.error("API KEY MANCANTE: Verifica il file .env");
-      throw new Error("API Key non configurata. Verifica il file .env.");
-  }
+  if (!apiKey) throw new Error("API Key mancante.");
 
   return retryOperation(async () => {
     try {
@@ -208,37 +276,70 @@ export const generateInteriorDesign = async (
       ? `\n=== STRICT MATERIAL PALETTE ===\nUse ONLY these materials for relevant objects:\n${config.selectedMaterials.map(m => `- ${m.prompt}`).join("\n")}\n`
       : "";
 
-  // 1. EDIT MODE PROMPT (STRICT MASKING)
+  // 1. EDIT MODE PROMPT (STRICT MASKING & COMPOSITING)
   if (config.mode === AppMode.EDITING) {
-     let prompt = `
-     ROLE: Expert Photo Retoucher & Interior Editor.
+     let prompt = "";
      
-     INPUTS:
-     1. IMAGE: The original room photo (Context).
-     2. MASK: A black and white binary map.
-        - WHITE PIXELS = EDIT ZONE (The area you MUST modify).
-        - BLACK PIXELS = PROTECTED ZONE (The area you MUST KEEP EXACTLY AS IS).
-     
-     USER TASK: "${config.customPrompt}"
-     
-     STRICT RULES:
-     1. APPLY the user task ONLY to the WHITE area of the provided mask.
-     2. THE BLACK AREA MUST REMAIN BIT-FOR-BIT IDENTICAL TO THE ORIGINAL IMAGE. DO NOT CHANGE IT.
-     3. Do not "reimagine" the room. Only edit the selection.
-     4. Blend the boundaries naturally so it looks like a real photo.
-     ${materialPrompts}
-     `;
+     if (config.maskBase64) {
+         // CASE A: User Painted a Mask (Specific Edit)
+         prompt = `
+         ROLE: Expert Photo Retoucher & Product Designer.
+         TASK: Modify ONLY the masked area. 
+         
+         USER REQUEST: "${config.customPrompt}"
+         
+         INPUTS:
+         - Image 1: Original.
+         - Image 2: Mask (White = Edit, Black = Protect).
+         
+         RULES:
+         1. Edit ONLY pixels corresponding to the White Mask.
+         2. DO NOT TOUCH the black area. 
+         3. Blend lighting perfectly.
+         ${materialPrompts}
+         `;
+     } else {
+         // CASE B: Global Edit (No Mask) - DANGEROUS FOR HALLUCINATIONS
+         // We must lock the geometry strictly.
+         prompt = `
+         ROLE: High-End Colorist & Lighting Director.
+         TASK: Adjust the atmosphere or specific details WITHOUT changing the 3D model of the furniture.
+         
+         USER REQUEST: "${config.customPrompt}"
+         
+         STRICT GEOMETRY LOCK:
+         1. The furniture (Sofa, Tables, Chairs) MUST remain EXACTLY the same shape and design.
+         2. DO NOT REPLACE FURNITURE MODELS.
+         3. You are adjusting Colors, Materials, Lighting, or Framing ONLY.
+         4. If the user asks for "Zoom" or "Angle change", crop the existing pixels, DO NOT invent a new room.
+         
+         ${materialPrompts}
+         `;
+     }
      
      const parts: any[] = [
          { text: prompt },
-         { inlineData: { data: imageBase64, mimeType: mimeType } } // Image 1
+         { inlineData: { data: imageBase64, mimeType: mimeType } } 
      ];
      
      if (config.maskBase64) {
-         parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } }); // Image 2
+         parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } });
      }
      
-     return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
+     const result = await executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
+
+     // CLIENT SIDE COMPOSITING (Only if mask exists)
+     if (config.maskBase64) {
+        try {
+            const blendedImage = await blendGeneratedWithOriginal(imageBase64, result.image.split(',')[1], config.maskBase64);
+            return { image: `data:image/jpeg;base64,${blendedImage}`, cost: result.cost };
+        } catch (e) {
+            console.error("Blending failed, returning raw AI output", e);
+            return result;
+        }
+     }
+
+     return result;
   }
 
   // 2. VIRTUAL STAGING
@@ -287,7 +388,6 @@ export const generateInteriorDesign = async (
   return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, []);
 };
 
-// WRAPPER FOR SINGLE IMAGE
 async function executeGenerationWithFallback(ai: GoogleGenAI, prompt: string, imageBase64: string, mimeType: string, config: GenerationConfig, extraParts: any[]): Promise<{ image: string, cost: number }> {
     const parts = [
         { text: prompt },
@@ -297,7 +397,6 @@ async function executeGenerationWithFallback(ai: GoogleGenAI, prompt: string, im
     return executeGenerationMultiModalWithFallback(ai, parts, config);
 }
 
-// MAIN EXECUTION WITH FALLBACK LOGIC
 async function executeGenerationMultiModalWithFallback(ai: GoogleGenAI, parts: any[], config: GenerationConfig): Promise<{ image: string, cost: number }> {
     const extractImage = (response: any) => {
         if (response.candidates && response.candidates[0].content.parts) {
@@ -310,7 +409,6 @@ async function executeGenerationMultiModalWithFallback(ai: GoogleGenAI, parts: a
         throw new Error("No image data found in response");
     };
 
-    // TENTATIVO 1: MODELLO PRO (Alta qualità)
     try {
         console.log("Tentativo generazione con Gemini 3 Pro...");
         return await retryOperation(async () => {
@@ -320,17 +418,15 @@ async function executeGenerationMultiModalWithFallback(ai: GoogleGenAI, parts: a
                 config: { seed: config.seed, imageConfig: { aspectRatio: config.ratio, imageSize: "4K" } },
             });
             return { image: extractImage(response), cost: PRICING_CONFIG.IMAGE_GEN_PRO };
-        }, 2); // Max 2 retries for Pro
+        }, 2);
     } catch (error: any) {
         console.warn("Gemini 3 Pro fallito. Provo con Flash...", error.message);
-        
-        // TENTATIVO 2: MODELLO FLASH (Veloce/Backup)
         try {
             return await retryOperation(async () => {
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash-image',
                     contents: { parts },
-                    config: { seed: config.seed, imageConfig: { aspectRatio: config.ratio } }, // No 4K param for Flash
+                    config: { seed: config.seed, imageConfig: { aspectRatio: config.ratio } }, 
                 });
                 return { image: extractImage(response), cost: PRICING_CONFIG.IMAGE_GEN_FLASH };
             }, 2);
@@ -355,13 +451,46 @@ export const generateDetailShot = async (
 
   const croppedBase64 = await cropBase64Image(fullImageBase64, rect.x, rect.y, rect.width, rect.height, 0.6);
   
-  let prompt = `ROLE: Expert Photographer. Subject: ${description || "Detail"}. Angle: ${angle}.`;
+  let prompt = "";
+
+  // === DIVERGE LOGIC BASED ON ANGLE ===
+  // 1. MACRO/FRONTAL (Conservative) -> Treat as Upscale
+  if (angle === DetailShotAngle.MACRO_STRAIGHT) {
+      prompt = `
+      ROLE: Forensic Photographer / Image Restorer.
+      INPUT: A low-res crop of a specific object.
+      TASK: Generate a High-Fidelity 4K Macro shot of THIS EXACT OBJECT.
+      
+      STRICT RULES:
+      1. DO NOT CHANGE THE GEOMETRY. Tracing must match the input perfectly.
+      2. DO NOT CHANGE THE STYLE.
+      3. Focus on Texture enhancement, Sharpness, and Lighting.
+      
+      Subject: ${description || "The main object in the crop"}.
+      `;
+  } 
+  // 2. ROTATION/TOP-DOWN (Creative but constrained) -> Treat as 3D Reconstruction
+  else {
+      prompt = `
+      ROLE: 3D Product Visualizer.
+      INPUT: Image 1 is the REFERENCE object.
+      TASK: Re-visualize THIS EXACT OBJECT from a new angle: ${angle}.
+      
+      IDENTITY PROTECTION RULES:
+      1. You must maintain the exact design identity of the object (e.g. if it's a tufted sofa, keep the tufting pattern identical).
+      2. If you rotate the view, extrapolate hidden details based on the visible style. Do not invent unrelated features.
+      3. The Context (Background) must match the style of the original room, adapted to the new perspective.
+      
+      Subject: ${description || "The main object"}.
+      `;
+  }
+
   let parts: any[] = [{ text: prompt }, { inlineData: { data: croppedBase64, mimeType: "image/jpeg" } }];
 
   if (textureReferenceBase64) {
       const tiled = await tileBase64Image(textureReferenceBase64, textureTiling);
       parts.push({ inlineData: { data: tiled, mimeType: "image/jpeg" } });
-      prompt += " Apply the provided texture (Image 2) to the object in Image 1.";
+      prompt += "\nOVERRIDE TEXTURE: Apply the texture from Image 2 to the object in Image 1, keeping the geometry of Image 1.";
       parts[0] = { text: prompt };
   }
 

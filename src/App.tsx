@@ -240,6 +240,7 @@ const App: React.FC = () => {
       }
   };
 
+  // ENFORCE STRICT BINARY MASK
   const getMaskBase64 = (): string | undefined => {
       if (!hasMask || !maskCanvasRef.current) return undefined;
       
@@ -249,20 +250,19 @@ const App: React.FC = () => {
       const ctx = tempCanvas.getContext('2d');
       
       if (ctx) {
-          // 1. Draw the user's strokes repeatedly to ensure opacity
-          // Drawing partially transparent strokes on top of each other increases opacity
+          // 1. Draw strokes multiple times to ensure opacity accumulation for semi-transparent brushes
           ctx.drawImage(maskCanvasRef.current, 0, 0);
           ctx.drawImage(maskCanvasRef.current, 0, 0);
           ctx.drawImage(maskCanvasRef.current, 0, 0);
-          
-          // 2. Change Source (strokes) to White
-          // 'source-in' keeps the new fill only where the existing content (strokes) matches
+
+          // 2. Fill colored areas with SOLID WHITE
+          // 'source-in' keeps the alpha of the drawing but replaces the color with the fillStyle
           ctx.globalCompositeOperation = 'source-in';
           ctx.fillStyle = '#FFFFFF';
           ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
           
-          // 3. Fill Background (Transparent areas) to Black
-          // 'destination-over' draws behind the existing content
+          // 3. Fill transparent areas with SOLID BLACK
+          // 'destination-over' draws behind existing content
           ctx.globalCompositeOperation = 'destination-over';
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
