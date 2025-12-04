@@ -5,22 +5,22 @@ import { STYLES, MASTER_SHOOTING_STYLES, PRICING_CONFIG } from "../constants";
 
 // Helper to get API Key safely (Vite or Process)
 const getApiKey = (): string => {
-  let key = "";
   try {
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env) {
       // @ts-ignore
-      key = import.meta.env.VITE_API_KEY || "";
+      return import.meta.env.VITE_API_KEY || "";
     }
-  } catch (e) {}
-  
-  if (!key) {
-    try {
-      // @ts-ignore
-      key = process.env.API_KEY || "";
-    } catch (e) {}
+  } catch (e) {
+    // Ignore error if import.meta is not available
   }
-  return key;
+  
+  try {
+    // @ts-ignore
+    return process.env.API_KEY || "";
+  } catch (e) {
+    return "";
+  }
 };
 
 // Helper to convert File to Base64
@@ -213,31 +213,26 @@ export const generateInteriorDesign = async (
   const ai = new GoogleGenAI({ apiKey });
 
   // === MATERIAL PROMPT BUILDING ===
-  // Extract selected materials prompts
   const materialPrompts = config.selectedMaterials && config.selectedMaterials.length > 0
       ? `\n=== STRICT MATERIAL PALETTE ===\nUse ONLY these materials for relevant objects:\n${config.selectedMaterials.map(m => `- ${m.prompt}`).join("\n")}\n`
       : "";
 
-  // 1. EDIT MODE PROMPT (MAGIC MASKING)
+  // 1. EDIT MODE PROMPT
   if (config.mode === AppMode.EDITING) {
      let prompt = `You are an expert interior design editor. TASK: Modify ONLY specific elements based on request: "${config.customPrompt}". PRESERVE everything else pixel-perfect.${materialPrompts}`;
-     
-     // Base input
      const parts: any[] = [
          { text: prompt },
-         { inlineData: { data: imageBase64, mimeType: mimeType } } // Image 1: Original
+         { inlineData: { data: imageBase64, mimeType: mimeType } }
      ];
-
      if (config.maskBase64) {
-         prompt += " \n A reference MASK is provided (Image 2). The WHITE areas in the mask indicate EXACTLY where to apply the changes. The BLACK areas must be preserved perfectly.";
+         prompt += " \n A reference MASK is provided (Image 2). WHITE areas = EDIT. BLACK areas = PRESERVE.";
          parts[0] = { text: prompt };
-         parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } }); // Image 2: Mask
+         parts.push({ inlineData: { data: config.maskBase64, mimeType: "image/png" } });
      }
-
      return executeGenerationWithFallback(ai, prompt, imageBase64, mimeType, config, config.maskBase64 ? [{ inlineData: { data: config.maskBase64, mimeType: "image/png" } }] : []);
   }
 
-  // 2. VIRTUAL STAGING PROMPT
+  // 2. VIRTUAL STAGING
   if (config.mode === AppMode.VIRTUAL_STAGING && config.productAssets && config.productAssets.length > 0) {
       const assetsList = config.productAssets.map((p, idx) => `${idx + 1}. ${p.label}`).join("\n");
       const prompt = `Virtual Staging Task. Place these assets into the room: ${assetsList}. Match perspective and lighting.${materialPrompts}`;
@@ -249,14 +244,18 @@ export const generateInteriorDesign = async (
   }
 
   // 3. RESTYLING PROMPT
+  // Logic updated to handle string IDs from JSON
   const styleObj = STYLES.find(s => s.id === config.style);
   const styleDescription = styleObj ? styleObj.description : config.style;
+  const styleName = styleObj ? styleObj.label : config.style;
+
   const shootingObj = MASTER_SHOOTING_STYLES.find(s => s.id === config.shootingStyle);
-  
+  const shootingDescription = shootingObj ? shootingObj.description : config.shootingStyle;
+
   const prompt = `
     RESTYLE INTERIOR.
-    Style: ${styleObj?.label}. Description: ${styleDescription}.
-    Shooting: ${shootingObj?.label}.
+    Style: ${styleName}. Description: ${styleDescription}.
+    Shooting: ${shootingDescription}.
     
     ${materialPrompts}
 
@@ -286,7 +285,9 @@ async function executeGenerationMultiModalWithFallback(ai: GoogleGenAI, parts: a
     const extractImage = (response: any) => {
         if (response.candidates && response.candidates[0].content.parts) {
             for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+                if (part.inlineData) {
+                    return `data:image/png;base64,${part.inlineData.data}`;
+                }
             }
         }
         throw new Error("No image data found in response");

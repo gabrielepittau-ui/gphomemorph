@@ -1,6 +1,6 @@
 
 import { jsPDF } from "jspdf";
-import { ArchitecturalStyle, MasterShootingStyle } from "../types";
+import { STYLES, MASTER_SHOOTING_STYLES } from "../constants";
 
 // Helper to extract dominant colors from image
 export const extractPalette = (imageElement: HTMLImageElement, colorCount: number = 5): string[] => {
@@ -133,9 +133,12 @@ export const generateMoodboardPDF = async (
 
   let currentY = startTextY;
   
-  // Get Style Name safely
-  const styleName = Object.values(ArchitecturalStyle).includes(config.style as any) ? config.style : "Custom";
-  const shotName = Object.values(MasterShootingStyle).includes(config.shootingStyle as any) ? config.shootingStyle : "Standard";
+  // Get Style Name safely from dynamic constants
+  const styleObj = STYLES.find(s => s.id === config.style);
+  const styleName = styleObj ? styleObj.label : config.style;
+
+  const shotObj = MASTER_SHOOTING_STYLES.find(s => s.id === config.shootingStyle);
+  const shotName = shotObj ? shotObj.label : config.shootingStyle;
 
   drawRow("STYLE:", styleName, currentY); currentY += lineHeight;
   drawRow("SHOOTING:", shotName, currentY); currentY += lineHeight;

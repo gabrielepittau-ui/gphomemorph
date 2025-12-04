@@ -1,0 +1,145 @@
+{
+  "pricing": {
+    "analysis": 0.001,
+    "imageGenPro": 0.040,
+    "imageGenFlash": 0.010
+  },
+  "baseContext": "Professional architectural photography of a luxury environment background. The center of the room is strictly empty, reserved for product placement. Background furniture (dining table and chairs, kitchen perceived in a loft, design furniture pieces like bookshelf or sideboards always design) are always present but positioned with coherence and style as only the best interior decorator in the world knows how to do. No clutter. Perfect visual balance and composition. 8k, photorealistic.",
+  "styles": [
+    {
+      "id": "warm_brutalism",
+      "label": "Warm Brutalism (L'Origine)",
+      "code": "01",
+      "description": "Luxury converted loft, raw concrete walls (béton brut), warm walnut wood furniture, black metal and fluted glass partition, dark herringbone parquet, soft cinematic lighting, architectural textures, spacious."
+    },
+    {
+      "id": "monochrome_mansion",
+      "label": "Monochrome Mansion (RH Style)",
+      "code": "02",
+      "description": "RH style interior, Restoration Hardware vibe, monochromatic greige palette, massive scale, reclaimed wood beams, architectural symmetry, heavy linen curtains, rustic-modern grandeur, matte finishes, spectacular chandelier, double height ceiling."
+    },
+    {
+      "id": "glass_pavilion",
+      "label": "Glass Pavilion",
+      "code": "03",
+      "description": "Cantilevered modern mansion, floor-to-ceiling glass walls, infinity pool view, panoramic scenery, ultra-modern architecture, glossy surfaces, direct sunlight, open plan living, seamless indoor-outdoor flow."
+    },
+    {
+      "id": "grand_haussmann",
+      "label": "Grand Haussmann",
+      "code": "04",
+      "description": "Haussmann style apartment, high ceilings (4 meters), decorative white moldings (boiserie), intricate herringbone parquet, large vertical french windows, marble fireplace, sophisticated, airy, bright, classic European luxury."
+    },
+    {
+      "id": "modern_farmhouse",
+      "label": "Modern Farmhouse",
+      "code": "05",
+      "description": "Luxury renovated farmhouse, high pitched ceiling with bleached wood beams, white stone walls, resin or stone floor, huge windows replacing barn doors, cozy but expansive, natural linen textures, bright and welcoming."
+    },
+    {
+      "id": "sculptural_organic",
+      "label": "Sculptural Organic",
+      "code": "06",
+      "description": "Soft minimalism, curved walls, organic architecture, micro-cement floor, monochromatic creamy white palette, arched doorways, sculptural staircase, fluid shapes, no sharp corners, ethereal light, futuristic primitive design."
+    },
+    {
+      "id": "milanese_eclectic",
+      "label": "Milanese Eclectic",
+      "code": "07",
+      "description": "Milanese design apartment, terrazzo floor (graniglia), rich velvet textures, bold wall colors (teal or terracotta), iconic italian design lamps, mix of vintage and modern, sophisticated, artistic flair, spacious."
+    },
+    {
+      "id": "wabi_sabi",
+      "label": "Wabi-Sabi Sanctuary",
+      "code": "08",
+      "description": "High-end wabi-sabi villa, lime wash plaster walls, rough hewn wood beams, earthy tones, beige and sand palette, minimalism, imperfect textures, natural light, peaceful atmosphere, spa-like feeling."
+    },
+    {
+      "id": "dark_techno",
+      "label": "Dark Techno-Luxury",
+      "code": "09",
+      "description": "Dark luxury interior, moody atmosphere, black marble feature wall, smoked glass partitions, dark wood slats, led strip lighting, sleek modernism, reflective surfaces, midnight tones, masculine elegance, high-tech vibe."
+    },
+    {
+      "id": "art_gallery",
+      "label": "Art Gallery Loft",
+      "code": "10",
+      "description": "Art collector penthouse, museum style interior, stark white walls, gallery lighting, polished concrete floor, minimalistic open space, large abstract art pieces, expansive windows, airy and bright, ultra-clean lines, negative space."
+    },
+    {
+      "id": "industrial_loft",
+      "label": "Industrial Loft",
+      "code": "11",
+      "description": "Authentic converted factory loft, exposed red brick walls (painted or natural), large black iron framed windows, exposed ductwork, cast iron columns, open space, eclectic and raw, high ceilings."
+    },
+    {
+      "id": "swiss_concrete",
+      "label": "Swiss Concrete Villa",
+      "code": "12",
+      "description": "Brutalist luxury villa, smooth exposed concrete walls, floor-to-ceiling frameless glass, polished concrete floors, floating staircase, sharp geometric lines, cold architectural light, rigorous minimalism, Zurich style."
+    },
+    {
+      "id": "alpine_chalet",
+      "label": "Alpine Luxury Chalet",
+      "code": "13",
+      "description": "Modern luxury chalet, double height ceiling, huge triangular windows with mountain view, light larch wood paneling, monumental stone fireplace, warm lighting, snowy exterior visible, cozy and exclusive."
+    },
+    {
+      "id": "mediterranean_riviera",
+      "label": "Mediterranean Riviera",
+      "code": "14",
+      "description": "Modern mediterranean villa, organic architecture, rough white plaster walls, stone niches, light irregular stone floor, pergola shadows, sunlight, coastal luxury, relaxing atmosphere, holiday vibe."
+    }
+  ],
+  "shootingStyles": [
+    { "id": "frontal_master", "label": "Frontal Master", "code": "A", "description": "Inquadratura frontale simmetrica, bilanciata, tipica delle riviste di architettura." },
+    { "id": "classic_34", "label": "Classic 3/4", "code": "B", "description": "Angolazione a 45 gradi per mostrare profondità e disposizione della stanza." },
+    { "id": "hero_shot", "label": "Hero Shot", "code": "C", "description": "Angolo basso, grandangolo moderato, rende lo spazio imponente e lussuoso." },
+    { "id": "topdown", "label": "Topdown", "code": "D", "description": "Vista dall'alto, ortogonale, ideale per layout e planimetrie arredate." },
+    { "id": "macro", "label": "Macro Detail", "code": "E", "description": "Focus stretto su texture e materiali, profondità di campo ridotta." },
+    { "id": "arch_wide", "label": "Arch Wide", "code": "F", "description": "Grandangolo spinto ma corretto, abbraccia tutto lo spazio." },
+    { "id": "soft_minimal", "label": "Soft Minimal", "code": "G", "description": "Luce morbida, ombre quasi assenti, colori pastello e pulizia visiva." },
+    { "id": "cinematic", "label": "Cinematic", "code": "H", "description": "Alto contrasto, luci e ombre drammatiche, atmosfera da film." },
+    { "id": "hasselblad", "label": "Hasselblad", "code": "I", "description": "Definizione estrema, colori fedeli, illuminazione da studio high-end." },
+    { "id": "leica", "label": "Leica Glow", "code": "J", "description": "Morbidezza caratteristica, alone luminoso sui punti luce, organico." },
+    { "id": "sculpting", "label": "Sculpting", "code": "K", "description": "Luci che scolpiscono i volumi, artistico e tridimensionale." },
+    { "id": "hyper_gloss", "label": "Hyper Gloss", "code": "L", "description": "Colori saturi, superfici riflettenti esaltate, moderno e patinato." },
+    { "id": "soft_aura", "label": "Soft Aura", "code": "M", "description": "Atmosfera sognante, diffusione, eleganza femminile." },
+    { "id": "product_clean", "label": "Product Clean", "code": "N", "description": "Illuminazione asettica, bianca, perfetta, senza ombre dure." },
+    { "id": "moody", "label": "Moody Nordic", "code": "O", "description": "Luce naturale laterale, ombre lunghe, atmosfera intima e scura." },
+    { "id": "hard_light", "label": "Hard Light", "code": "P", "description": "Luce solare diretta, ombre nette, geometrico e definito." },
+    { "id": "rh_sourcebook", "label": "RH Sourcebook", "code": "Q", "description": "Fotografia drammatica e 'moody', luce naturale laterale morbida, ombre profonde e decise, color grading desaturato su toni caldi neutri." }
+  ],
+  "roomTypes": [
+    { "id": "living_room", "label": "Soggiorno", "icon": "Armchair" },
+    { "id": "bedroom", "label": "Camera", "icon": "BedDouble" },
+    { "id": "kitchen", "label": "Cucina", "icon": "ChefHat" },
+    { "id": "dining", "label": "Pranzo", "icon": "Utensils" },
+    { "id": "office", "label": "Ufficio", "icon": "Monitor" },
+    { "id": "bathroom", "label": "Bagno", "icon": "Bath" },
+    { "id": "art_decor", "label": "Quadri", "icon": "Frame" }
+  ],
+  "roomAddons": {
+    "living_room": ["Piante", "Tappeto", "Lampade design", "Cuscini arredo", "Coffee table", "Human", "Specchio grande", "Plaid"],
+    "bedroom": ["Piante", "Tappeto", "Lampade design", "Cuscini arredo", "Coffee table", "Human", "Specchio grande", "Plaid"],
+    "kitchen": ["Erbe aromatiche", "Vaso frutta", "Tagliere legno", "Utensili rame", "Macchina caffè"],
+    "dining": ["Centrotavola", "Candele", "Lampadario scultoreo", "Vaso fiori", "Tappeto"],
+    "office": ["Lampada tavolo", "Libreria", "Organizer", "Pianta scrivania", "Poltrona ergonomica"],
+    "bathroom": ["Set spa", "Candele", "Piante umidità", "Cesto vimini", "Specchio led"],
+    "art_decor": ["Astratto materico", "Tela grande formato", "Minimalista", "Fotografia B&N", "Opera geometrica", "Dittico moderno"]
+  },
+  "materials": [
+    { "id": "f_mohair", "label": "Velluto Mohair", "category": "Fabric", "prompt": "High-pile luxurious Mohair Velvet, soft sheen, deep texture, visible fibers." },
+    { "id": "f_linen", "label": "Lino Belga Grezzo", "category": "Fabric", "prompt": "Heavyweight Belgian Linen, raw natural weave, organic creases, matte finish." },
+    { "id": "f_boucle", "label": "Lana Bouclé", "category": "Fabric", "prompt": "Creamy Bouclé Wool, nubby texture, soft and tactile, cozy appearance." },
+    { "id": "f_leather", "label": "Pelle Anilina", "category": "Fabric", "prompt": "Full-grain Aniline Leather, natural patina, soft buttery texture, slight imperfections." },
+    { "id": "w_walnut", "label": "Noce Canaletto", "category": "Wood", "prompt": "American Black Walnut (Canaletto), rich dark grain, satin finish, premium joinery." },
+    { "id": "w_oak", "label": "Rovere Sbiancato", "category": "Wood", "prompt": "White Oak (Bleached), pale Scandinavian tone, matte oil finish, visible wood grain." },
+    { "id": "w_ebony", "label": "Ebano Macassar", "category": "Wood", "prompt": "Macassar Ebony, dramatic high-contrast grain, high-gloss piano finish, luxury veneer." },
+    { "id": "s_calacatta", "label": "Marmo Calacatta", "category": "Stone", "prompt": "Calacatta Gold Marble, white background with dramatic gold and grey veining, honed finish." },
+    { "id": "s_travertine", "label": "Travertino Romano", "category": "Stone", "prompt": "Roman Travertine, unfilled texture, warm beige tones, horizontal vein cut, matte stone." },
+    { "id": "s_slate", "label": "Ardesia Nera", "category": "Stone", "prompt": "Natural Black Slate, riven texture, dark charcoal grey, matte rocky surface." },
+    { "id": "m_brass", "label": "Ottone Brunito", "category": "Metal", "prompt": "Burnished Brass, antiqued gold tone, brushed texture, warm metallic reflection." },
+    { "id": "m_steel", "label": "Acciaio Nero", "category": "Metal", "prompt": "Blackened Steel, industrial look, matte charcoal finish, slight welding marks." }
+  ]
+}
