@@ -200,7 +200,7 @@ export const detectFurniture = async (
       console.error("Detection Error:", error);
       throw error;
     }
-  });
+  }); 
 };
 
 export const generateInteriorDesign = async (
